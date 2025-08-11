@@ -1,0 +1,3 @@
+[submodule "triton_controller/TritonController"]
+	path = triton_controller/TritonController
+	url = https://github.com/chieftain0/TritonController.git

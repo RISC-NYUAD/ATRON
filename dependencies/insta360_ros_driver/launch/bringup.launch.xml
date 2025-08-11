@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="equirectangular" default="true"/>
+    <arg name="imu_filter" default="true"/>
+    <arg name="equirectangular_config" default="$(find-pkg-share insta360_ros_driver)/config/equirectangular.yaml"/>
+    <arg name="imu_config" default="$(find-pkg-share insta360_ros_driver)/config/imu_filter.yaml"/>
+
+    <!-- Publishes Compressed Images -->
+    <node pkg="insta360_ros_driver" exec="insta360_ros_driver" name="insta360_ros_driver" output="screen"/>
+
+    <!-- Decodes Compressed Images -->
+    <node pkg="insta360_ros_driver" exec="decoder" name="image_decoder" output="screen"/>
+
+    <!-- Creates Equirectangular Images -->
+    <node if="$(var equirectangular)" pkg="insta360_ros_driver" exec="equirectangular_cpp" name="equirectangular_node" output="screen">
+        <param from="$(var equirectangular_config)" />
+    </node>
+
+    <!-- Applies a Madgwick Filter to the 6-DOF IMU to get Orientation -->
+    <node if="$(var imu_filter)" pkg="imu_filter_madgwick" exec="imu_filter_madgwick_node" name="imu_filter" output="screen">
+        <param from="$(var imu_config)"/>
+    </node>
+</launch>

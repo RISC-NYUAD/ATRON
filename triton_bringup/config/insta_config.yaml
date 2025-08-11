@@ -1,0 +1,29 @@
+# config/config.yaml
+
+bringup:
+  ros__parameters:
+    raw_bag_folder: /home/bag/raw
+    compressed_bag_folder: /home/bag/compressed
+    undistorted_bag_folder: /home/bag/undistorted
+    image_save_directory: /home/saved_images
+
+live_processing:
+  ros__parameters:
+    undistort: False
+    compress_image: True
+    K: 
+      - 305.8511660909695
+      - 0.0
+      - 571.9976412068438
+      - 0.0
+      - 304.8739784192282
+      - 578.9734717897188
+      - 0.0
+      - 0.0
+      - 1.0
+
+    D:
+      - 0.0829955798117611
+      - -0.027906274475464777
+      - 0.0076202648985968895
+      - -0.0010836351255689319

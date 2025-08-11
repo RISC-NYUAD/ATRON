@@ -1,0 +1,15 @@
+<launch>
+  <!-- Arguments -->
+  <arg name="input_file" default="/tmp/markers.oplib" description="Path to the .oplib input file"/>
+  <arg name="output_file" default="/home/john/ros2_ws/stats.json" description="Path to the output JSON file"/>
+  <arg name="time_limit" default="18000000" description="Time limit in milliseconds"/>
+  <arg name="exact" default="false" description="Use exact algorithm (requires CPLEX)"/>
+  
+  <!-- Op Solver Node -->
+  <node pkg="op_solver_ros" exec="op_solver_node" name="op_solver_node" output="screen">
+    <param name="input_file" value="$(var input_file)"/>
+    <param name="output_file" value="$(var output_file)"/>
+    <param name="time_limit" value="$(var time_limit)"/>
+    <param name="exact" value="$(var exact)"/>
+  </node>
+</launch>

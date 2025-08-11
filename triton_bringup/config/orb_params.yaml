@@ -1,0 +1,75 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters. Adjust them!
+#--------------------------------------------------------------------------------------------
+Camera.type: "KannalaBrandt8"
+
+# Camera calibration and distortion parameters (OpenCV) 
+Camera.fx: 254.875
+Camera.fy: 254.875
+Camera.cx: 480.0
+Camera.cy: 480.0
+
+# Equidistant distortion 0.0034823894022493434, 0.0007150348452162257, -0.0020532361418706202, 0.00020293673591811182
+# Camera.bFishEye: 1
+Camera.k1: 0.0829955798117611
+Camera.k2: -0.027906274475464777
+Camera.k3: 0.0076202648985968895
+Camera.k4: -0.0010836351255689319
+    
+# Camera resolution
+Camera.width: 960
+Camera.height: 960
+
+# Camera frames per second 
+Camera.fps: 30.0
+
+# Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
+Camera.RGB: 1
+
+#--------------------------------------------------------------------------------------------
+# ORB Parameters
+#--------------------------------------------------------------------------------------------
+
+# ORB Extractor: Number of features per image
+ORBextractor.nFeatures: 2000 # Tested with 1250
+
+# ORB Extractor: Scale factor between levels in the scale pyramid 	
+ORBextractor.scaleFactor: 1.2
+
+# ORB Extractor: Number of levels in the scale pyramid	
+ORBextractor.nLevels: 8
+
+# ORB Extractor: Fast threshold
+# Image is divided in a grid. At each cell FAST are extracted imposing a minimum response.
+# Firstly we impose iniThFAST. If no corners are detected we impose a lower value minThFAST
+# You can lower these values if your images have low contrast			
+# ORBextractor.iniThFAST: 20
+# ORBextractor.minThFAST: 7
+ORBextractor.iniThFAST: 15 # 20
+ORBextractor.minThFAST: 5 # 7
+
+LoopClosing.minScore: 30
+LoopClosing.minMatchesForLoopDetection: 50
+LoopClosing.minVerificationMatches: 25
+
+LocalMapping.KeyframeReductionRatio: 0.8
+LocalMapping.RedundantCulling: 0.8 
+
+MotionModel.UseMotionModel: 1 
+MotionModel.KeyFrameSize: 5
+
+#--------------------------------------------------------------------------------------------
+# Viewer Parameters
+#--------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05      # Keep as is for keyframes
+Viewer.KeyFrameLineWidth: 1.5  # Slightly increase for better visibility
+Viewer.GraphLineWidth: 1.8     # Increase from 0.9 to make path more visible
+Viewer.PointSize: 2.5          # Slightly larger points for better visibility
+Viewer.CameraSize: 0.04        # Reduce from 0.08 to make camera smaller
+Viewer.CameraLineWidth: 2      # Reduce from 3 to make camera frame less dominant
+Viewer.ViewpointX: 0           # Keep viewpoint position
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -3.5
+Viewer.ViewpointF: 500

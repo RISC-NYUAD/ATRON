@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>  
+    <arg name="use_sim_time" default="true"/>
+    <!-- Camera Parameters -->
+    <arg name="equirectangular_config" default="$(find-pkg-share triton_bringup)/config/equirectangular.yaml"/>
+    <arg name="imu_config" default="$(find-pkg-share triton_bringup)/config/imu_filter.yaml"/>
+
+    <!-- Robot Description -->
+    <arg name="urdf" default="$(find-pkg-share triton_bringup)/urdf/catamaran.urdf"/>
+
+    <!-- SLAM Parameters -->
+    <arg name="slam_config" default="$(find-pkg-share triton_bringup)/config/slam_toolbox.yaml"/>
+
+    <!-- Robot Localization -->
+    <arg name="robot_localization_config" default="$(find-pkg-share triton_bringup)/config/robot_localization.yaml"/>
+
+    <!-- Joystick -->
+    <arg name="teleop_config" default="$(find-pkg-share triton_bringup)/config/teleop_config.yaml"/>
+    <!-- <include file="$(find-pkg-share triton_bringup)/launch/joystick.launch.py"/> -->
+
+    <!-- Navigation Arguments -->
+    <arg name="footprint_file" default="$(find-pkg-share triton_navigation)/config/footprint.yaml"/>
+
+    <!-- Zenoh -->
+    <node pkg="rmw_zenoh_cpp" exec="rmw_zenohd" name="zenoh_router"/>
+
+    <!-- Robot Description -->
+    <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="robot_description" value="$(command 'cat $(var urdf)')"/>
+    </node>
+
+    <!-- Control Bringup -->
+    <!-- <node pkg="triton_controller" exec="triton_controller.py" output="screen">
+        <param name="serial_port" value="/dev/ttyACM0"/>
+        <param name="baud_rate" value="115200"/>
+        <param name="max_linear_velocity" value="1.0"/>
+        <param name="max_angular_velocity" value="0.314"/>
+        <param name="control_frequency" value="10.0"/>
+        <param name="request_imu" value="false"/>
+        <param name="imu_frame_id" value="board_imu_frame"/>
+        <param name="imu_topic" value="/board/imu/data"/>
+        <param name="conveyor_duty_cycle" value="0.75"/>
+    </node> -->
+
+    <!-- joystick -->
+    <node pkg="joy" exec="joy_node" name="joystick">
+        <param name="device_id" value="0"/>
+        <param name="autorepeat_rate" value="10.0"/>
+    </node>
+
+    <node pkg="teleop_twist_joy" exec="teleop_node" name="teleop_twist_joy_node">
+        <param from="$(var teleop_config)"/>
+    </node>
+
+    <!-- Camera Bringup -->
+    <!-- <node pkg="insta360_ros_driver" exec="insta360_ros_driver" name="insta360_ros_driver" output="screen"/> -->
+    <!-- <node pkg="insta360_ros_driver" exec="decoder" name="image_decoder" output="screen"/> -->
+    <!-- <node pkg="imu_filter_madgwick" exec="imu_filter_madgwick_node" name="imu_filter" output="screen">
+        <param from="$(var imu_config)"/>
+    </node> -->
+
+    <!-- Laser Bringup -->
+    <!-- <node pkg="rplidar_ros" exec="rplidar_node" name="lidar_node">
+        <param name="channel_type" value="serial"/>
+        <param name="serial_port" value="/dev/ttyUSB0"/>
+        <param name="serial_baudrate" value="1000000"/>
+        <param name="frame_id" value="laser_frame"/>
+        <param name="inverted" value="false"/>
+        <param name="angle_compensate" value="true"/>
+        <param name="scan_mode" value="DenseBoost"/>
+    </node> -->
+
+    <!-- Camera Processing -->
+    <!-- <node pkg="insta360_ros_driver" exec="equirectangular_cpp" name="equirectangular_node" output="screen">
+        <param from="$(var equirectangular_config)" />
+    </node> -->
+    <!-- <node pkg="triton_bringup" exec="cubemap.py" name="cubemap" output="log"/> -->
+    <!-- <node pkg="triton_bringup" exec="yolo.py" name="yolo_node"/> -->
+    <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_front">
+        <param name="image_topic" value="/cubemap_front/image"/>
+        <param name="bbox_topic" value="/cubemap_front/bbox"/>
+        <param name="semantic_topic" value="/cubemap_front/labels"/>
+        <param name="output_topic" value='/cubemap_front/detection/image'/>
+        <param name="marker_topic" value="/cubemap_front/detection/markers"/>
+        <param name="height" value="1.507"/>
+        <param name="offset" value="0.5"/>
+        <param name="color_code" value="true"/>
+        <param name="camera_direction" value="front"/>
+    </node>
+    <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_back">
+        <param name="image_topic" value="/cubemap_back/image"/>
+        <param name="bbox_topic" value="/cubemap_back/bbox"/>
+        <param name="semantic_topic" value="/cubemap_back/labels"/>
+        <param name="output_topic" value='/cubemap_back/detection/image'/>
+        <param name="marker_topic" value="/cubemap_back/detection/markers"/>
+        <param name="height" value="1.507"/>
+        <param name="offset" value="0.5"/>
+        <param name="color_code" value="true"/>
+        <param name="camera_direction" value="back"/>
+    </node>
+    <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_left">
+        <param name="image_topic" value="/cubemap_left/image"/>
+        <param name="bbox_topic" value="/cubemap_left/bbox"/>
+        <param name="semantic_topic" value="/cubemap_left/labels"/>
+        <param name="output_topic" value='/cubemap_left/detection/image'/>
+        <param name="marker_topic" value="/cubemap_left/detection/markers"/>
+        <param name="height" value="1.507"/>
+        <param name="offset" value="0.5"/>
+        <param name="color_code" value="true"/>
+        <param name="camera_direction" value="left"/>
+    </node>
+    <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_right">
+        <param name="image_topic" value="/cubemap_right/image"/>
+        <param name="bbox_topic" value="/cubemap_right/bbox"/>
+        <param name="semantic_topic" value="/cubemap_right/labels"/>
+        <param name="output_topic" value='/cubemap_right/detection/image'/>
+        <param name="marker_topic" value="/cubemap_right/detection/markers"/>
+        <param name="height" value="1.507"/>
+        <param name="offset" value="0.5"/>
+        <param name="color_code" value="true"/>
+        <param name="camera_direction" value="right"/>
+    </node>
+
+    <!-- Orienteering -->
+    <node pkg="triton_navigation" exec="orienteering.py" name="orienteering_node">
+        <param name="marker_topics" value="[/cubemap_front/detection/markers, /cubemap_back/detection/markers, /cubemap_left/detection/markers, /cubemap_right/detection/markers]"/>
+        <param name="output_topic" value="/combined_markers"/>
+        <param name="output_frame" value="map"/>
+        <param name="sync_tolerance" value="0.1"/>
+        <param name="transform_timeout" value="0.1"/>
+        <param name="tracking_enabled" value="false"/>
+        <param name="color_code" value="true"/>
+        <param name="max_tracking_age" value="10"/>
+        <param name="min_tracking_hits" value="2"/>
+        <param name="distance_threshold" value="3.0"/>
+        <param name="process_noise" value="0.01"/>
+        <param name="measurement_noise" value="1.0"/>
+    </node>
+
+
+    <!-- Scan Matcher -->
+    <node pkg="ros2_laser_scan_matcher" exec="laser_scan_matcher" name="scan_matcher" output="screen">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="base_frame" value="base_link"/>
+        <param name="odom_frame" value="odom"/>
+        <param name="map_frame" value="map"/>
+        <param name="laser_frame" value="laser_frame"/>
+        <param name="publish_odom" value="odom"/>
+        <param name="publish_tf" value="true"/>
+    </node>
+
+    <!-- Slam Toolbox -->
+    <include file="$(find-pkg-share slam_toolbox)/launch/online_sync_launch.py">
+        <arg name="slam_params_file" value="$(var slam_config)"/>
+        <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
+
+    <node pkg="tf2_ros" exec="static_transform_publisher" name="imu_to_camera_broadcaster" args="-0.26356 0.017346 1.5071 -1.57079 0 -1.57079 base_link camera_frame">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    <!-- Front camera frame (identity transform from camera_frame) -->
+    <node pkg="tf2_ros" exec="static_transform_publisher" name="camera_to_front_camera_broadcaster" args="0 0 0 0 0 0 camera_frame front_camera_frame">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    <!-- Left camera frame (90 degrees rotation around -Y axis) -->
+    <node pkg="tf2_ros" exec="static_transform_publisher" name="camera_to_left_camera_broadcaster" args="0 0 0 0 -1.57079 0 camera_frame left_camera_frame">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    <!-- Right camera frame (-90 degrees rotation around -Y axis) -->
+    <node pkg="tf2_ros" exec="static_transform_publisher" name="camera_to_right_camera_broadcaster" args="0 0 0 0 1.57079 0 camera_frame right_camera_frame">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    <!-- Back camera frame (180 degrees rotation around -Y axis) -->
+    <node pkg="tf2_ros" exec="static_transform_publisher" name="camera_to_back_camera_broadcaster" args="0 0 0 0 3.14159 0 camera_frame back_camera_frame">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    
+    <!-- <node pkg="robot_localization" exec="ekf_node" name="ekf_node" output="screen">
+        <param from="$(var robot_localization_config)"/>
+    </node> -->
+
+    <!-- Web Server -->
+    <!-- <node pkg="rosboard" exec="rosboard_node" output="screen"/> -->
+
+
+    <!-- Navigation Stack -->
+    <node pkg="triton_navigation" exec="path_planning" name="path_planning_node" output="screen">
+        <param from="$(var footprint_file)"/>
+    </node>
+
+    <node pkg="triton_navigation" exec="path_following_controller" name="path_following_controller" output="screen">
+        <param from="$(find-pkg-share triton_navigation)/config/path_following.yaml"/>
+    </node>
+</launch>

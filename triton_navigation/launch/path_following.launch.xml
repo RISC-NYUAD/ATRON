@@ -1,0 +1,6 @@
+<launch>
+    <!-- Path Following Controller Node -->
+    <node pkg="triton_navigation" exec="path_following_controller" name="path_following_controller" output="screen">
+        <param from="$(find-pkg-share triton_navigation)/config/path_following.yaml"/>
+    </node>
+</launch>

@@ -1,0 +1,27 @@
+path_planning_node:
+  ros__parameters:
+    # Robot footprint parameters
+    # Footprint is defined as a set of vertices relative to the robot's center
+    # Format: [x1, y1, x2, y2, x3, y3, x4, y4] for 4 vertices
+    footprint:
+      # vertices: [-0.2, -0.15, 0.2, -0.15, 0.2, 0.15, -0.2, 0.15]  # Back left, back right, front right, front left
+      # vertices: [1.6, 0.9, 1.6, -0.9, -1.3, 0.9, -1.3, -0.9]
+      vertices: [-1.3, -0.8, 1.6, -0.8, 1.6, 0.8, -1.3, 0.8]
+    
+    # Path planning parameters
+    # When using SLAM, unknown cells (-1) should be treated as free space to allow exploration
+    treat_unknown_as_free: true
+    
+    # Planning time in seconds - planner will find multiple solutions and return the shortest
+    planning_time: 5.0
+    
+    # Planner type: "RRTstar" for optimal paths (slower initial solution, improves over time)
+    #               "RRTConnect" for fast initial solution (no optimization)
+    # planner_type: "RRTstar"
+    planner_type: "RRTstar"
+    
+    # Safety margin in meters - robot will avoid obstacles by at least this distance
+    safety_margin: 0.1
+    
+    # Occupancy threshold - cells with values >= this are considered obstacles (0-100)
+    occupancy_threshold: 50

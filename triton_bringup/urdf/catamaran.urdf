@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot
+  name="triton_bringup">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="-0.15255 -0.023475 0.022654"
+        rpy="0 0 0" />
+      <mass
+        value="130.17" />
+      <inertia
+        ixx="5.6732"
+        ixy="-0.00045483"
+        ixz="0.43012"
+        iyy="19.201"
+        iyz="0.00052797"
+        izz="22.393" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://triton_bringup/meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.2 0.2 0.2 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://triton_bringup/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="imu_frame">
+    <inertial>
+      <origin
+        xyz="0.00068136 0 -1.9636E-18"
+        rpy="0 0 0" />
+      <mass
+        value="0.10219" />
+      <inertia
+        ixx="2.164E-05"
+        ixy="4.1061E-21"
+        ixz="8.4435E-22"
+        iyy="0.00012537"
+        iyz="-1.7427E-13"
+        izz="0.00011069" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://triton_bringup/meshes/imu_frame.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.49804 0.49804 0.49804 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://triton_bringup/meshes/imu_frame.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="base_to_imu"
+    type="fixed">
+    <origin
+      xyz="-0.26356 0.017346 1.5071"
+      rpy="0 -1.5708 -1.5708"/>
+    <parent
+      link="base_link" />
+    <child
+      link="imu_frame" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+  <link
+    name="laser_frame">
+    <inertial>
+      <origin
+        xyz="2.3015E-18 0 -0.023005"
+        rpy="0 0 0" />
+      <mass
+        value="0.37044" />
+      <inertia
+        ixx="0.0004034"
+        ixy="3.9422E-21"
+        ixz="-3.1161E-21"
+        iyy="0.0004034"
+        iyz="1.2029E-21"
+        izz="0.00065663" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://triton_bringup/meshes/laser_frame.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://triton_bringup/meshes/laser_frame.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="base_to_laser"
+    type="fixed">
+    <origin
+      xyz="0.32244 0.017346 0.40707"
+      rpy="0 0 -1.5708" />
+    <parent
+      link="base_link" />
+    <child
+      link="laser_frame" />
+    <axis
+      xyz="0 0 0" />
+  </joint>
+</robot>

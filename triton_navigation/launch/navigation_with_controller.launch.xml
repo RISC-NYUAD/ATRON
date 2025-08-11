@@ -1,0 +1,11 @@
+<launch>
+    <!-- Path Planning Node -->
+    <node pkg="triton_navigation" exec="path_planning" name="path_planning_node" output="screen">
+        <param from="$(find-pkg-share triton_navigation)/config/footprint.yaml"/>
+    </node>
+    
+    <!-- Path Following Controller Node -->
+    <node pkg="triton_navigation" exec="path_following_controller" name="path_following_controller" output="screen">
+        <param from="$(find-pkg-share triton_navigation)/config/path_following.yaml"/>
+    </node>
+</launch>

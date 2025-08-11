@@ -1,0 +1,35 @@
+
+Frequency: 500 Hz
+Off: 75% Duty Cycle
+Forward: 100% Duty Cycle
+Reverse: 50% Duty Cycle
+
+Configurations:
+Joystick is pressed forward (0 <= linear.x <= 1.5):
+- scale both thrusters to PWM between 75% and 100%
+
+Joystick is pressed backward (-1.5 <= linear.x <= 0):
+- scale both thrusters to PWM between 50% and 75%
+
+Joystick is pressed to the left(0 <= angular.z <= 1.0):
+- scale right thruster between 75% and 100%
+- scale left thruster between 50% and 75%
+
+Joystick is pressed to the right (-1.0 <= angular.z <= 0)
+- scale right thruster betweeen 50% and 75%
+- scale left thruster between 75% and 100%
+
+Do not have mixed considerations, choose only one of the four cases. However, in a lot of cases, both linear.x and angular.z will be nonzero. To decide the priority (if to travel linearly or to rotate), choose the greater value between abs(linear.x)/1.5 and abs(angular.z)/1.0.
+
+Publishing PWM:
+import serial
+import time
+
+arduino = serial.Serial('/dev/ttyACM0', 9600)
+time.sleep(2)  # Allow time for Arduino to reset
+duty_cycle <-- Define Duty Cycle (between 0.5 and 1.0)
+frequency = 500
+
+period = 1/frequency * 1e6 (period in microseconds)
+arduino.write(b'1600\n')
+
