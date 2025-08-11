@@ -1,3 +1,6 @@
 [submodule "triton_controller/TritonController"]
 	path = triton_controller/TritonController
 	url = https://github.com/chieftain0/TritonController.git
+[submodule "dependencies/insta360_ros_driver"]
+	path = dependencies/insta360_ros_driver
+	url = https://github.com/ai4ce/insta360_ros_driver
