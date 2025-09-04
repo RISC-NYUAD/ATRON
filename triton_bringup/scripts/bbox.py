@@ -173,7 +173,7 @@ class BBoxVisualizer(Node):
         if not self.color_code:
             # Use default colors when color coding is disabled
             if class_name == 'buoy':
-                return (255, 128, 0)  # Orange (BGR format for OpenCV)
+                return (0, 165, 255)  # Orange (BGR format for OpenCV)
             else:  # debris
                 return (0, 0, 255)    # Red (BGR format for OpenCV)
         
@@ -200,14 +200,21 @@ class BBoxVisualizer(Node):
         
         # Get colors for this camera direction
         colors = direction_colors.get(self.camera_direction, {
-            'buoy': (255, 128, 0),  # Orange fallback
+            'buoy': (0, 165, 255),  # Orange fallback
             'debris': (0, 0, 255)   # Red fallback
         })
         
-        return colors.get(class_name, (255, 128, 0))  # Default to orange
+        return colors.get(class_name, (0, 165, 255))  # Default to orange
 
     def get_color_for_class(self, class_name):
         """Get a consistent color for each class"""
+        if not self.color_code:
+            # Use default colors when color coding is disabled
+            if class_name == 'buoy':
+                return (0, 165, 255)  # Orange (BGR format for OpenCV)
+            else:  # debris
+                return (0, 0, 255)    # Red (BGR format for OpenCV)
+        
         if class_name not in self.colors:
             self.colors[class_name] = self.available_colors[self.color_index % len(self.available_colors)]
             self.color_index += 1

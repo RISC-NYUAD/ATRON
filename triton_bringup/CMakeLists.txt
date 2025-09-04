@@ -17,7 +17,7 @@ include_directories(
 )
 
 install(
-  DIRECTORY config launch urdf meshes
+  DIRECTORY config launch urdf
   DESTINATION share/${PROJECT_NAME}
 )
 

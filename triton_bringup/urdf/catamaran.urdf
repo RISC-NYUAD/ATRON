@@ -23,7 +23,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://triton_bringup/meshes/base_link.STL" />
+          filename="file:///home/john/ros2_ws/src/Triton/triton_bringup/urdf/meshes/base_link.STL" />
       </geometry>
       <material
         name="">
@@ -37,7 +37,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://triton_bringup/meshes/base_link.STL" />
+          filename="file:///home/john/ros2_ws/src/Triton/triton_bringup/urdf/meshes/base_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -63,7 +63,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://triton_bringup/meshes/imu_frame.STL" />
+          filename="file:///home/john/ros2_ws/src/Triton/triton_bringup/urdf/meshes/imu_frame.STL" />
       </geometry>
       <material
         name="">
@@ -77,7 +77,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://triton_bringup/meshes/imu_frame.STL" />
+          filename="file:///home/john/ros2_ws/src/Triton/triton_bringup/urdf/meshes/imu_frame.STL" />
       </geometry>
     </collision>
   </link>
@@ -116,7 +116,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://triton_bringup/meshes/laser_frame.STL" />
+          filename="file:///home/john/ros2_ws/src/Triton/triton_bringup/urdf/meshes/laser_frame.STL" />
       </geometry>
       <material
         name="">
@@ -130,7 +130,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://triton_bringup/meshes/laser_frame.STL" />
+          filename="file:///home/john/ros2_ws/src/Triton/triton_bringup/urdf/meshes/laser_frame.STL" />
       </geometry>
     </collision>
   </link>

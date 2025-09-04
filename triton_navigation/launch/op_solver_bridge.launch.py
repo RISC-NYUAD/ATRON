@@ -9,7 +9,7 @@ def generate_launch_description():
             name='op_solver_bridge',
             output='screen',
             parameters=[{
-                'cost_limit': 40.0,
+                'cost_limit': 50.0,
                 'oplib_file': 'config/problem.oplib',
                 'solution_file': 'config/stats.json'
             }]

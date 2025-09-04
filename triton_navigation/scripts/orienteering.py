@@ -487,7 +487,7 @@ class OrienteeringNode(Node):
         if not self.color_code:
             # Use default colors when color coding is disabled
             if class_id == 0:  # Buoy
-                return (1.0, 0.5, 0.0)  # Orange
+                return (1.0, 0.65, 0.0)  # Orange
             else:  # Debris
                 return (1.0, 0.0, 0.0)  # Red
         
@@ -834,20 +834,19 @@ class OrienteeringNode(Node):
                         # Skip markers that couldn't be transformed
                         continue
                     
-                    # Apply direction-specific colors in non-tracking mode
-                    if self.color_code:
-                        source_camera = topic.split('/')[1]  # Extract 'cubemap_front' from '/cubemap_front/detection/markers'
-                        
-                        # Determine class from marker type
-                        class_id = 0 if transformed_marker.type == Marker.CYLINDER else 1
-                        
-                        # Get direction-specific colors
-                        color = self.get_direction_colors(source_camera, class_id)
-                        
-                        # Apply the colors
-                        transformed_marker.color.r = color[0]
-                        transformed_marker.color.g = color[1] 
-                        transformed_marker.color.b = color[2]
+                    # Apply colors in non-tracking mode
+                    source_camera = topic.split('/')[1]  # Extract 'cubemap_front' from '/cubemap_front/detection/markers'
+                    
+                    # Determine class from marker type
+                    class_id = 0 if transformed_marker.type == Marker.CYLINDER else 1
+                    
+                    # Get colors (direction-specific if color_code=True, default if False)
+                    color = self.get_direction_colors(source_camera, class_id)
+                    
+                    # Apply the colors
+                    transformed_marker.color.r = color[0]
+                    transformed_marker.color.g = color[1] 
+                    transformed_marker.color.b = color[2]
                     
                     # Scale cylinder obstacles and move down z-axis
                     if transformed_marker.type == Marker.CYLINDER:  # Buoy

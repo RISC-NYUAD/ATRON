@@ -13,7 +13,7 @@ path_planning_node:
     treat_unknown_as_free: true
     
     # Planning time in seconds - planner will find multiple solutions and return the shortest
-    planning_time: 5.0
+    planning_time: 10.0
     
     # Planner type: "RRTstar" for optimal paths (slower initial solution, improves over time)
     #               "RRTConnect" for fast initial solution (no optimization)
