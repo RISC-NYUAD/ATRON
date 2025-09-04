@@ -87,6 +87,16 @@ class BBoxVisualizer(Node):
             ParameterDescriptor(description='Marker lifetime in seconds (0 for infinite)')
         )
         self.declare_parameter(
+            'horizon_margin',
+            5.0,
+            ParameterDescriptor(description='Pixel margin below horizon to accept range (avoid near-horizon blowup)')
+        )
+        self.declare_parameter(
+            'max_range',
+            0.0,
+            ParameterDescriptor(description='Clamp range to this max distance in meters (0 to disable)')
+        )
+        self.declare_parameter(
             'color_code',
             False,
             ParameterDescriptor(description='Enable direction-specific colors for bounding boxes and markers')
@@ -115,6 +125,8 @@ class BBoxVisualizer(Node):
         self.marker_lifetime = self.get_parameter('marker_lifetime').get_parameter_value().double_value
         self.color_code = self.get_parameter('color_code').get_parameter_value().bool_value
         self.camera_direction = self.get_parameter('camera_direction').get_parameter_value().string_value
+        self.horizon_margin = self.get_parameter('horizon_margin').get_parameter_value().double_value
+        self.max_range = self.get_parameter('max_range').get_parameter_value().double_value
         
         # Initialize CV bridge
         self.bridge = CvBridge()
@@ -264,17 +276,30 @@ class BBoxVisualizer(Node):
             # Compute bottom_y for all detections
             bottom_y = center_y + size_y / 2
             
-            # Vectorized projection calculations
-            pixels = np.column_stack([center_x, bottom_y])
-            pixels_centered = pixels - np.array([self.cx, self.cy])
-            angles = (self.fov/2) * pixels_centered / np.array([self.fx, self.fy])
-            
-            # Compute z and x for all points at once
-            z_values = self.height / np.tan(angles[:, 1]) + self.offset
-            x_values = z_values * np.tan(angles[:, 0])
+            # Proper pinhole projection (no linear FOV scaling):
+            # tan(theta_y) = (v - cy) / fy ; z = height / tan(theta_y) = height * fy / (v - cy)
+            # x = z * (u - cx) / fx
+            dy = bottom_y - self.cy
+            valid = dy > self.horizon_margin
+
+            z_values = np.full(n_detections, np.nan, dtype=float)
+            x_values = np.full(n_detections, np.nan, dtype=float)
+
+            if np.any(valid):
+                z_values[valid] = (self.height * self.fy) / dy[valid] + self.offset
+                x_values[valid] = ((center_x[valid] - self.cx) / self.fx) * z_values[valid]
+
+                # Optional max range clamp
+                if self.max_range > 0.0:
+                    z_values[valid] = np.minimum(z_values[valid], self.max_range)
             
             # Process each detection in the array
             for i, detection in enumerate(bbox_array_msg.detections):
+                # Skip invalid projections (near or above horizon)
+                if not np.isfinite(x_values[i]) or not np.isfinite(z_values[i]):
+                    # Optionally, draw bbox only without placing a 3D marker
+                    continue
+
                 # Get bounding box
                 bbox = detection.bbox
                 

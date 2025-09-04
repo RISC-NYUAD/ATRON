@@ -85,7 +85,12 @@
         <param name="semantic_topic" value="/cubemap_front/labels"/>
         <param name="output_topic" value='/cubemap_front/detection/image'/>
         <param name="marker_topic" value="/cubemap_front/detection/markers"/>
-        <param name="height" value="1.507"/>
+        <!-- Cubemap face is 480x480 -->
+        <param name="cx" value="240.0"/>
+        <param name="cy" value="240.0"/>
+        <param name="fx" value="240.0"/>
+        <param name="fy" value="240.0"/>
+        <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
         <param name="color_code" value="true"/>
         <param name="camera_direction" value="front"/>
@@ -96,7 +101,12 @@
         <param name="semantic_topic" value="/cubemap_back/labels"/>
         <param name="output_topic" value='/cubemap_back/detection/image'/>
         <param name="marker_topic" value="/cubemap_back/detection/markers"/>
-        <param name="height" value="1.507"/>
+        <!-- Cubemap face is 480x480 -->
+        <param name="cx" value="240.0"/>
+        <param name="cy" value="240.0"/>
+        <param name="fx" value="240.0"/>
+        <param name="fy" value="240.0"/>
+        <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
         <param name="color_code" value="true"/>
         <param name="camera_direction" value="back"/>
@@ -107,7 +117,12 @@
         <param name="semantic_topic" value="/cubemap_left/labels"/>
         <param name="output_topic" value='/cubemap_left/detection/image'/>
         <param name="marker_topic" value="/cubemap_left/detection/markers"/>
-        <param name="height" value="1.507"/>
+        <!-- Cubemap face is 480x480 -->
+        <param name="cx" value="240.0"/>
+        <param name="cy" value="240.0"/>
+        <param name="fx" value="240.0"/>
+        <param name="fy" value="240.0"/>
+        <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
         <param name="color_code" value="true"/>
         <param name="camera_direction" value="left"/>
@@ -118,7 +133,12 @@
         <param name="semantic_topic" value="/cubemap_right/labels"/>
         <param name="output_topic" value='/cubemap_right/detection/image'/>
         <param name="marker_topic" value="/cubemap_right/detection/markers"/>
-        <param name="height" value="1.507"/>
+        <!-- Cubemap face is 480x480 -->
+        <param name="cx" value="240.0"/>
+        <param name="cy" value="240.0"/>
+        <param name="fx" value="240.0"/>
+        <param name="fy" value="240.0"/>
+        <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
         <param name="color_code" value="true"/>
         <param name="camera_direction" value="right"/>
@@ -131,13 +151,17 @@
         <param name="output_frame" value="map"/>
         <param name="sync_tolerance" value="0.1"/>
         <param name="transform_timeout" value="0.1"/>
-        <param name="tracking_enabled" value="false"/>
+        <param name="tracking_enabled" value="true"/>
         <param name="color_code" value="true"/>
         <param name="max_tracking_age" value="10"/>
         <param name="min_tracking_hits" value="2"/>
         <param name="distance_threshold" value="3.0"/>
-        <param name="process_noise" value="0.01"/>
-        <param name="measurement_noise" value="1.0"/>
+        <param name="process_noise" value="0.001"/>
+        <param name="measurement_noise" value="0.3"/>
+        <!-- Advanced tracker tuning -->
+        <param name="mahalanobis_threshold" value="3.5"/>
+        <param name="range_noise_scale" value="0.02"/>
+        <param name="depth_noise_factor" value="2.5"/>
     </node>
 
 

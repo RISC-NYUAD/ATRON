@@ -19,87 +19,63 @@ import cv2
 
 
 class KalmanFilter3D:
-    """Kalman filter for 3D object tracking - optimized for stationary objects"""
+    """Kalman filter for 3D object tracking, specialized for stationary objects.
+
+    State: [x, y, z, vx, vy, vz], but velocity is constrained toward 0.
+    Allows per-update measurement covariance to reflect range-dependent uncertainty.
+    """
     def __init__(self, process_noise=0.01, measurement_noise=1.0):
-        # State vector: [x, y, z, vx, vy, vz]
         self.state = np.zeros(6)
-        
-        # State transition matrix (constant position model for stationary objects)
-        self.F = np.eye(6)
-        
-        # Measurement matrix (we observe x, y, z)
-        self.H = np.eye(3, 6)
-        
-        # Process noise covariance - very low for stationary objects
+        self.F = np.eye(6)  # Constant-position model
+        self.H = np.eye(3, 6)  # Observe position only
+
+        # Process noise: small on position, near-zero on velocity (stationary prior)
         self.Q = np.eye(6) * process_noise
-        self.Q[3:, 3:] = 0.0001  # Nearly zero velocity noise since objects don't move
-        
-        # Measurement noise covariance
+        self.Q[3:, 3:] = 1e-6
+
+        # Default measurement noise (overridden per update if provided)
         self.R = np.eye(3) * measurement_noise
-        
-        # State covariance matrix
+
+        # State covariance: start uncertain in position, low in velocity
         self.P = np.eye(6)
-        self.P[:3, :3] *= 10  # Position uncertainty
-        self.P[3:, 3:] *= 0.01  # Very low velocity uncertainty
-        
-        # Innovation covariance
-        self.S = np.zeros((3, 3))
-        
-        # Kalman gain
-        self.K = np.zeros((6, 3))
-        
+        self.P[:3, :3] *= 25.0
+        self.P[3:, 3:] *= 1e-3
+
         self.initialized = False
-        
+
     def initialize(self, x, y, z):
-        """Initialize filter with first measurement"""
         self.state[:3] = [x, y, z]
-        self.state[3:] = 0  # Zero initial velocity
+        self.state[3:] = 0.0
         self.initialized = True
-        
+
     def predict(self, dt):
-        """Predict next state - for stationary objects, position doesn't change"""
         if not self.initialized:
             return
-            
-        # For stationary objects, we don't update position based on velocity
-        # Keep F as identity matrix (no position change)
-        # self.F[0, 3] = 0  # No x position change from velocity
-        # self.F[1, 4] = 0  # No y position change from velocity
-        # self.F[2, 5] = 0  # No z position change from velocity
-        
-        # Predict state (essentially no change for stationary objects)
+        # No motion model; keep state, grow uncertainty slightly
         self.state = self.F @ self.state
-        
-        # Predict covariance
         self.P = self.F @ self.P @ self.F.T + self.Q
-        
-        # Decay velocity estimates toward zero since objects are stationary
-        self.state[3:] *= 0.9  # Velocity decay factor
-        
-    def update(self, x, y, z):
-        """Update state with new measurement"""
+        # Hard-constrain velocity toward zero
+        self.state[3:] = 0.0
+
+    def update(self, x, y, z, R_override=None):
         if not self.initialized:
             self.initialize(x, y, z)
             return
-            
-        # Measurement
         z_meas = np.array([x, y, z])
-        
+        R = self.R if R_override is None else R_override
         # Innovation
-        y = z_meas - self.H @ self.state
-        
-        # Innovation covariance
-        self.S = self.H @ self.P @ self.H.T + self.R
-        
-        # Kalman gain
-        self.K = self.P @ self.H.T @ np.linalg.inv(self.S)
-        
-        # Update state
-        self.state = self.state + self.K @ y
-        
-        # Update covariance
+        innov = z_meas - (self.H @ self.state)
+        S = self.H @ self.P @ self.H.T + R
+        K = self.P @ self.H.T @ np.linalg.inv(S)
+        self.state = self.state + K @ innov
         I = np.eye(6)
-        self.P = (I - self.K @ self.H) @ self.P
+        self.P = (I - K @ self.H) @ self.P
+
+    def get_position(self):
+        return self.state[:3]
+
+    def get_velocity(self):
+        return self.state[3:]
         
     def get_position(self):
         """Get filtered position"""
@@ -132,10 +108,13 @@ class TrackedObject:
         self.age += 1
         self.time_since_update += 1
         
-    def update(self, position, confidence, source_camera, current_time):
+    def update(self, position, confidence, source_camera, current_time, R_override=None):
         """Update with new detection"""
         self.confidence = confidence
-        self.kalman.update(*position)
+        if R_override is not None:
+            self.kalman.update(*position, R_override=R_override)
+        else:
+            self.kalman.update(*position)
         self.hits += 1
         self.time_since_update = 0
         self.last_update_time = current_time
@@ -161,17 +140,34 @@ class TrackedObject:
 
 class GlobalTracker:
     """Global multi-object tracker that handles detections from multiple cameras"""
-    def __init__(self, max_age=10, min_hits=3, distance_threshold=2.0, 
-                 process_noise=0.01, measurement_noise=1.0):
+    def __init__(self, max_age=10, min_hits=3, distance_threshold=2.0,
+                 process_noise=0.01, measurement_noise=1.0,
+                 mahalanobis_threshold=3.5, range_noise_scale=0.02, depth_noise_factor=2.5):
         self.max_age = max_age
         self.min_hits = min_hits
         self.distance_threshold = distance_threshold
         self.process_noise = process_noise
         self.measurement_noise = measurement_noise
+        self.mahalanobis_threshold = mahalanobis_threshold
+        self.range_noise_scale = range_noise_scale
+        self.depth_noise_factor = depth_noise_factor
         self.tracks = []
         self.next_id = 0
         # Position averaging window for stationary objects
         self.position_memory = {}  # track_id -> list of recent positions
+
+    def _measurement_covariance(self, position):
+        """Build measurement covariance R based on range. Larger range => higher variance.
+        Uses measurement_noise as base (in meters), and adds scale * r^2. Depth axis inflated.
+        """
+        pos = np.asarray(position)
+        r = float(np.linalg.norm(pos))
+        sigma_base = float(self.measurement_noise)
+        sigma_lat = sigma_base + self.range_noise_scale * (r ** 2)
+        sigma_y = max(0.2, 0.5 * sigma_lat)  # vertical usually better constrained
+        sigma_depth = self.depth_noise_factor * sigma_lat
+        R = np.diag([sigma_lat**2, sigma_y**2, sigma_depth**2])
+        return R
         
     def update(self, detections, current_time):
         """
@@ -207,15 +203,25 @@ class GlobalTracker:
                     
             detection_groups.append(group)
         
-        # Merge grouped detections by averaging positions
+        # Merge grouped detections by (variance-)weighted averaging positions
         merged_detections = []
         for group in detection_groups:
             if len(group) == 1:
                 merged_detections.append(detections[group[0]])
             else:
-                # Average position of all detections in group
+                # Weighted average using inverse variance from measurement covariance
                 positions = [np.array(detections[idx]['position']) for idx in group]
-                avg_position = np.mean(positions, axis=0)
+                variances = []
+                for idx in group:
+                    R = self._measurement_covariance(detections[idx]['position'])
+                    variances.append(np.diag(R))
+                variances = np.array(variances)  # shape (N,3)
+                # Avoid division by zero
+                variances = np.clip(variances, 1e-6, None)
+                weights = 1.0 / variances  # shape (N,3)
+                weights_sum = np.sum(weights, axis=0)
+                weighted_pos_sum = np.sum(np.array(positions) * weights, axis=0)
+                avg_position = weighted_pos_sum / weights_sum
                 
                 # Take highest confidence
                 confidences = [detections[idx]['confidence'] for idx in group]
@@ -242,15 +248,22 @@ class GlobalTracker:
             distance_matrix = np.zeros((len(merged_detections), len(self.tracks)))
             for d, det in enumerate(merged_detections):
                 for t, track in enumerate(self.tracks):
-                    # Euclidean distance between detection and predicted track position
                     track_pos = track.kalman.get_position()
                     det_pos = np.array(det['position'])
-                    distance = np.linalg.norm(det_pos - track_pos)
-                    
+                    # Mahalanobis distance using track covariance + measurement covariance
+                    R = self._measurement_covariance(det_pos)
+                    P_pos = track.kalman.P[:3, :3]
+                    S = P_pos + R
+                    try:
+                        innov = det_pos - track_pos
+                        d2 = float(innov.T @ np.linalg.inv(S) @ innov)
+                        distance = np.sqrt(max(d2, 0.0))
+                    except np.linalg.LinAlgError:
+                        # Fallback to Euclidean if S not invertible
+                        distance = float(np.linalg.norm(det_pos - track_pos))
                     # Penalize class mismatch
                     if det['class_id'] != track.class_id:
                         distance += 10.0
-                        
                     distance_matrix[d, t] = distance
                     
             # Hungarian algorithm for optimal assignment
@@ -261,13 +274,16 @@ class GlobalTracker:
             matched_tracks = set()
             
             for d, t in zip(row_ind, col_ind):
-                if distance_matrix[d, t] < self.distance_threshold:
-                    det = merged_detections[d]
+                det = merged_detections[d]
+                # Accept match only if inside Mahalanobis gate
+                if distance_matrix[d, t] < self.mahalanobis_threshold:
+                    R = self._measurement_covariance(det['position'])
                     self.tracks[t].update(
                         det['position'],
                         det['confidence'],
                         det['source_camera'],
-                        current_time
+                        current_time,
+                        R_override=R
                     )
                     matched_detections.add(d)
                     matched_tracks.add(t)
@@ -441,12 +457,24 @@ class OrienteeringNode(Node):
         
         # Initialize global tracker if enabled
         if self.tracking_enabled:
+            # Optional advanced tracking parameters
+            self.declare_parameter('mahalanobis_threshold', 3.5)
+            self.declare_parameter('range_noise_scale', 0.02)
+            self.declare_parameter('depth_noise_factor', 2.5)
+
+            mahal = self.get_parameter('mahalanobis_threshold').get_parameter_value().double_value
+            rn_scale = self.get_parameter('range_noise_scale').get_parameter_value().double_value
+            depth_factor = self.get_parameter('depth_noise_factor').get_parameter_value().double_value
+
             self.tracker = GlobalTracker(
                 max_age=self.max_tracking_age,
                 min_hits=self.min_tracking_hits,
                 distance_threshold=self.distance_threshold,
                 process_noise=self.process_noise,
-                measurement_noise=self.measurement_noise
+                measurement_noise=self.measurement_noise,
+                mahalanobis_threshold=mahal,
+                range_noise_scale=rn_scale,
+                depth_noise_factor=depth_factor
             )
             self.previous_track_ids = set()
         else:
