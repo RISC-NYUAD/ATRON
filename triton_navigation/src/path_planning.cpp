@@ -15,6 +15,42 @@ bool g_treat_unknown_as_free = true;
 double g_safety_margin = 0.1; // Safety margin in meters (10cm default)
 int g_occupancy_threshold = 50; // Occupancy threshold for obstacles
 std::vector<CylinderObstacle> g_cylinder_obstacles; // Global storage for cylinder obstacles
+// Approximate robot radius (max distance from origin to any footprint vertex)
+double g_robot_radius = 0.5;
+
+// Weight for clearance-aware optimization (0 = pure path length)
+static constexpr double kClearanceWeight = 0.25;  // Tunable
+static constexpr double kClearanceEps = 0.05;     // Avoid division by zero
+
+// Compute approximate radial extent of the footprint from its center
+static inline double computeFootprintRadius(const geometry_msgs::msg::Polygon& poly) {
+    double r = 0.0;
+    for (const auto& p : poly.points) {
+        double d = std::sqrt(p.x * p.x + p.y * p.y);
+        if (d > r) r = d;
+    }
+    return r;
+}
+
+// Fast clearance estimate to cylinder obstacles only (map-based clearance is expensive).
+// Returns free-space clearance (meters) between robot center and nearest obstacle edge,
+// minus robot radius and safety margin. Clamped at zero.
+static inline double cylinderClearanceEstimate(double x, double y) {
+    double min_clear = std::numeric_limits<double>::infinity();
+    for (const auto& c : g_cylinder_obstacles) {
+        double dx = x - c.x;
+        double dy = y - c.y;
+        double d = std::sqrt(dx*dx + dy*dy) - c.radius;
+        if (d < min_clear) min_clear = d;
+    }
+    // If there are no cylinders, return a large clearance
+    if (!std::isfinite(min_clear)) {
+        return 10.0; // effectively unbounded
+    }
+    // Subtract robot radius and safety margin to approximate footprint clearance
+    double free_clear = min_clear - (g_robot_radius + g_safety_margin);
+    return std::max(0.0, free_clear);
+}
 
 Planner2D::Planner2D(void)
 {
@@ -408,77 +444,74 @@ nav_msgs::msg::Path Planner2D::planPath(const nav_msgs::msg::OccupancyGrid& glob
     auto pdef(std::make_shared<ob::ProblemDefinition>(si));
     pdef->setStartAndGoalStates(*start.get(), *goal.get());
     
+    // Map unsupported planners to supported ones
+    if (planner_type_ == "BITstar") {
+        RCLCPP_WARN(rclcpp::get_logger("planner_2d"), "BITstar disabled; falling back to RRTstar");
+        planner_type_ = "RRTstar";
+    }
+
     // Set optimization objective for optimal planners
     if (planner_type_ == "RRTstar") {
-        // Create a simple optimization objective that minimizes path length
-        class PathLengthObjective : public ob::OptimizationObjective
-        {
+        // Clearance-aware objective: path length with a soft penalty for getting too
+        // close to cylinder obstacles. This helps RRT* and BIT* prefer more direct
+        // routes through wider gaps instead of detouring around narrow corridors.
+        class ClearanceAwareObjective : public ob::OptimizationObjective {
         public:
-            PathLengthObjective(const ob::SpaceInformationPtr &si) : OptimizationObjective(si) 
-            {
-                // Set a description
-                description_ = "Path Length";
+            ClearanceAwareObjective(const ob::SpaceInformationPtr &si)
+                : OptimizationObjective(si) {
+                description_ = "ClearanceAwareLength";
             }
-            
-            ob::Cost stateCost(const ob::State *) const override
-            {
+
+            ob::Cost stateCost(const ob::State *) const override {
                 return ob::Cost(0.0);
             }
-            
-            ob::Cost motionCost(const ob::State *s1, const ob::State *s2) const override
-            {
-                return ob::Cost(si_->distance(s1, s2));
+
+            ob::Cost motionCost(const ob::State *s1, const ob::State *s2) const override {
+                // Base cost is Euclidean length
+                const double len = si_->distance(s1, s2);
+
+                // Evaluate a simple clearance penalty at segment endpoints
+                const auto *a = s1->as<ob::SE2StateSpace::StateType>();
+                const auto *b = s2->as<ob::SE2StateSpace::StateType>();
+
+                const double ca = cylinderClearanceEstimate(a->getX(), a->getY());
+                const double cb = cylinderClearanceEstimate(b->getX(), b->getY());
+
+                // Higher penalty when clearance is small
+                const double pa = 1.0 / (kClearanceEps + ca);
+                const double pb = 1.0 / (kClearanceEps + cb);
+                const double penalty = 0.5 * (pa + pb);
+
+                return ob::Cost(len * (1.0 + kClearanceWeight * penalty));
             }
-            
-            // Provide a heuristic for the cost-to-go (straight line distance to goal)
-            ob::Cost motionCostHeuristic(const ob::State *s1, const ob::State *s2) const override
-            {
-                return ob::Cost(si_->distance(s1, s2));
-            }
-            
-            // Combine costs by addition (for path length)
-            ob::Cost combineCosts(ob::Cost c1, ob::Cost c2) const override
-            {
+
+            ob::Cost combineCosts(ob::Cost c1, ob::Cost c2) const override {
                 return ob::Cost(c1.value() + c2.value());
             }
-            
-            // Identity cost is zero
-            ob::Cost identityCost() const override
-            {
-                return ob::Cost(0.0);
-            }
-            
-            // Set whether the objective is symmetric
-            bool isSymmetric() const override
-            {
-                return true;
-            }
+
+            ob::Cost identityCost() const override { return ob::Cost(0.0); }
+            bool isSymmetric() const override { return true; }
         };
-        
-        auto objective = std::make_shared<PathLengthObjective>(si);
-        
-        // Set up cost-to-go heuristic for informed sampling
+
+        auto objective = std::make_shared<ClearanceAwareObjective>(si);
+
+        // Use straight-line distance for admissible cost-to-go (penalty is non-negative)
         objective->setCostToGoHeuristic([](const ob::State *state, const ob::Goal *goal) -> ob::Cost {
-            // Cast to proper state type
-            const auto *se2state = state->as<ob::SE2StateSpace::StateType>();
-            
-            // Get goal state (assuming single goal state)
             if (goal->hasType(ob::GoalType::GOAL_STATE)) {
-                const auto *goalState = goal->as<ob::GoalState>()->getState()->as<ob::SE2StateSpace::StateType>();
-                
-                // Compute Euclidean distance as admissible heuristic
-                double dx = se2state->getX() - goalState->getX();
-                double dy = se2state->getY() - goalState->getY();
+                const auto *s = state->as<ob::SE2StateSpace::StateType>();
+                const auto *g = goal->as<ob::GoalState>()->getState()->as<ob::SE2StateSpace::StateType>();
+                const double dx = s->getX() - g->getX();
+                const double dy = s->getY() - g->getY();
                 return ob::Cost(std::sqrt(dx * dx + dy * dy));
             }
-            
             return ob::Cost(0.0);
         });
-        
+
         pdef->setOptimizationObjective(objective);
-        
-        RCLCPP_INFO(rclcpp::get_logger("planner_2d"), 
-                    "Using RRTstar with path length optimization objective and informed sampling");
+
+        RCLCPP_INFO(rclcpp::get_logger("planner_2d"),
+                    "Using %s with clearance-aware length objective",
+                    planner_type_.c_str());
     }
 
     // create planner based on type
@@ -490,11 +523,11 @@ nav_msgs::msg::Path Planner2D::planPath(const nav_msgs::msg::OccupancyGrid& glob
         // Enable informed sampling for better performance after initial solution
         rrtstar->setInformedSampling(true);
         // Set goal bias to occasionally sample the goal (helps find initial solution faster)
-        rrtstar->setGoalBias(0.1);
+        rrtstar->setGoalBias(0.2);
         // Increase rewiring factor for better path optimization (default is 1.1)
-        rrtstar->setRewireFactor(2.0);  // Increased for more aggressive rewiring
-        // Use radius-based rewiring for better consistency
-        rrtstar->setKNearest(false);
+        rrtstar->setRewireFactor(1.5);
+        // Use k-nearest rewiring which tends to be more robust in 2D
+        rrtstar->setKNearest(true);
         // Delay optimization focus until we have a solution
         rrtstar->setDelayCC(true);
         // Focus new samples in the informed subset after solution is found
@@ -502,10 +535,14 @@ nav_msgs::msg::Path Planner2D::planPath(const nav_msgs::msg::OccupancyGrid& glob
         // Set a reasonable pruning threshold
         rrtstar->setPruneThreshold(0.1);
         planner = rrtstar;
+    } else if (planner_type_ == "PRMstar") {
+        auto prm = std::make_shared<og::PRMstar>(si);
+        planner = prm;
     } else {
         // RRTConnect for fast planning
         auto rrtconnect = std::make_shared<og::RRTConnect>(si);
-        rrtconnect->setRange(maxStepLength);
+        // Slightly larger range improves exploration and often yields straighter paths
+        rrtconnect->setRange(std::max(0.5, maxStepLength));
         planner = rrtconnect;
     }
     
@@ -625,6 +662,9 @@ bool Planner2D::isReadyToPlan() const {
 void Planner2D::setFootprint(const geometry_msgs::msg::Polygon& footprint) {
     footprint_ = footprint;
     robotFootprint = footprint;
+    // Update the approximate robot radius used for clearance estimation
+    g_robot_radius = computeFootprintRadius(robotFootprint);
+    RCLCPP_INFO(rclcpp::get_logger("planner_2d"), "Updated robot radius estimate: %.3f m", g_robot_radius);
 }
 
 void Planner2D::setTreatUnknownAsFree(bool treat_unknown_as_free) {

@@ -19,6 +19,8 @@ class OpSolverBridge(Node):
         self.declare_parameter('cost_limit', 10000.0)
         self.declare_parameter('oplib_file', 'config/problem.oplib')
         self.declare_parameter('solution_file', 'config/stats.json')
+        # Clustering radius in meters (adjacent markers within this distance are grouped)
+        self.declare_parameter('cluster_radius', 1.5)
         
         # Get package share directory for relative paths
         from ament_index_python.packages import get_package_share_directory
@@ -191,12 +193,15 @@ class OpSolverBridge(Node):
             self.get_logger().info(f"Solution cycle: {cycle}")
             self.get_logger().info(f"Waypoint indices (markers only): {waypoint_indices}")
             
-            # Create and publish PoseArray
-            pose_array = self.create_pose_array(waypoint_indices)
+            # Build clustered waypoints (adjacent markers within radius are grouped)
+            clustered_points = self.cluster_waypoints(waypoint_indices)
+
+            # Create and publish PoseArray from clustered points
+            pose_array = self.create_pose_array_from_points(clustered_points)
             self.waypoint_pub.publish(pose_array)
-            
-            # Create and publish Path
-            path = self.create_path(waypoint_indices)
+
+            # Create and publish Path from clustered points
+            path = self.create_path_from_points(clustered_points)
             self.path_pub.publish(path)
             
             # Get solution cost
@@ -204,7 +209,10 @@ class OpSolverBridge(Node):
             cost_meters = cost / 1000.0  # Convert back to meters
             
             response.success = True
-            response.message = f"Created {len(waypoint_indices)} waypoints from solution. Total path cost: {cost_meters:.2f} meters"
+            response.message = (
+                f"Created {len(clustered_points)} clustered waypoints from {len(waypoint_indices)} markers. "
+                f"Total path cost: {cost_meters:.2f} meters"
+            )
             self.get_logger().info(response.message)
             
         except json.JSONDecodeError as e:
@@ -218,40 +226,37 @@ class OpSolverBridge(Node):
             
         return response
         
-    def create_pose_array(self, waypoint_indices: List[int]) -> PoseArray:
+    def create_pose_array_from_points(self, points: List[Tuple[float, float]]) -> PoseArray:
         pose_array = PoseArray()
         pose_array.header.stamp = self.get_clock().now().to_msg()
         pose_array.header.frame_id = 'map'
-        
-        if self.last_markers is None or not self.sphere_indices:
-            self.get_logger().warning("No markers available for creating pose array")
+
+        if not points:
+            self.get_logger().warning("No points available for creating pose array")
             return pose_array
-            
-        for node_idx in waypoint_indices:
-            # Map solution index to original marker index
-            if node_idx < len(self.sphere_indices):
-                original_idx = self.sphere_indices[node_idx]
-                if original_idx < len(self.last_markers.markers):
-                    marker = self.last_markers.markers[original_idx]
-                    pose = Pose()
-                    pose.position = marker.pose.position
-                    pose.orientation.x = 0.0
-                    pose.orientation.y = 0.0
-                    pose.orientation.z = 0.0
-                    pose.orientation.w = 1.0
-                    pose_array.poses.append(pose)
-                
+
+        for x, y in points:
+            pose = Pose()
+            pose.position.x = x
+            pose.position.y = y
+            pose.position.z = 0.0
+            pose.orientation.x = 0.0
+            pose.orientation.y = 0.0
+            pose.orientation.z = 0.0
+            pose.orientation.w = 1.0
+            pose_array.poses.append(pose)
+
         return pose_array
-    
-    def create_path(self, waypoint_indices: List[int]) -> Path:
+
+    def create_path_from_points(self, points: List[Tuple[float, float]]) -> Path:
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = 'map'
-        
-        if self.last_markers is None or not self.sphere_indices:
-            self.get_logger().warning("No markers available for creating path")
+
+        if not points:
+            self.get_logger().warning("No points available for creating path")
             return path
-        
+
         # Start from origin (depot)
         origin_pose = PoseStamped()
         origin_pose.header = path.header
@@ -263,28 +268,93 @@ class OpSolverBridge(Node):
         origin_pose.pose.orientation.z = 0.0
         origin_pose.pose.orientation.w = 1.0
         path.poses.append(origin_pose)
-        
-        # Add all waypoints in the cycle order
-        for node_idx in waypoint_indices:
-            # Map solution index to original marker index
-            if node_idx < len(self.sphere_indices):
-                original_idx = self.sphere_indices[node_idx]
-                if original_idx < len(self.last_markers.markers):
-                    marker = self.last_markers.markers[original_idx]
-                    pose_stamped = PoseStamped()
-                    pose_stamped.header = path.header
-                    pose_stamped.pose.position = marker.pose.position
-                    pose_stamped.pose.orientation.x = 0.0
-                    pose_stamped.pose.orientation.y = 0.0
-                    pose_stamped.pose.orientation.z = 0.0
-                    pose_stamped.pose.orientation.w = 1.0
-                    path.poses.append(pose_stamped)
-        
+
+        # Add clustered waypoints in order
+        for x, y in points:
+            pose_stamped = PoseStamped()
+            pose_stamped.header = path.header
+            pose_stamped.pose.position.x = x
+            pose_stamped.pose.position.y = y
+            pose_stamped.pose.position.z = 0.0
+            pose_stamped.pose.orientation.x = 0.0
+            pose_stamped.pose.orientation.y = 0.0
+            pose_stamped.pose.orientation.z = 0.0
+            pose_stamped.pose.orientation.w = 1.0
+            path.poses.append(pose_stamped)
+
         # Return to origin (depot)
         path.poses.append(origin_pose)
-        
-        self.get_logger().info(f"Created path with {len(path.poses)} poses (including depot at start and end)")
+
+        self.get_logger().info(f"Created clustered path with {len(points)} waypoints (including depot at start and end)")
         return path
+
+    def ensure_sphere_indices(self) -> None:
+        """Ensure sphere_indices is populated from the latest markers."""
+        if self.last_markers is None:
+            return
+        if self.sphere_indices:
+            return
+        self.sphere_indices = [i for i, m in enumerate(self.last_markers.markers) if m.type == Marker.SPHERE]
+
+    def cluster_waypoints(self, waypoint_indices: List[int]) -> List[Tuple[float, float]]:
+        """Cluster adjacent markers in the ordered list by proximity.
+
+        Returns a list of representative (x, y) points for each cluster in order.
+        Adjacent markers within `cluster_radius` meters are grouped together.
+        The representative is the centroid of each cluster.
+        """
+        # Guard conditions
+        if self.last_markers is None:
+            self.get_logger().warning("No markers available for clustering")
+            return []
+
+        # Ensure sphere index mapping exists
+        self.ensure_sphere_indices()
+
+        # Extract ordered positions for waypoint indices
+        ordered_points: List[Tuple[float, float]] = []
+        for node_idx in waypoint_indices:
+            if 0 <= node_idx < len(self.sphere_indices):
+                original_idx = self.sphere_indices[node_idx]
+                if 0 <= original_idx < len(self.last_markers.markers):
+                    m = self.last_markers.markers[original_idx]
+                    ordered_points.append((m.pose.position.x, m.pose.position.y))
+
+        if not ordered_points:
+            return []
+
+        radius = float(self.get_parameter('cluster_radius').value)
+
+        # Cluster consecutive points based on pairwise distance
+        clusters: List[List[Tuple[float, float]]] = []
+        current_cluster: List[Tuple[float, float]] = [ordered_points[0]]
+
+        def dist(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+            dx = a[0] - b[0]
+            dy = a[1] - b[1]
+            return (dx*dx + dy*dy) ** 0.5
+
+        for i in range(1, len(ordered_points)):
+            if dist(ordered_points[i], ordered_points[i-1]) <= radius:
+                current_cluster.append(ordered_points[i])
+            else:
+                clusters.append(current_cluster)
+                current_cluster = [ordered_points[i]]
+        clusters.append(current_cluster)
+
+        # Compute centroids for clusters
+        cluster_centroids: List[Tuple[float, float]] = []
+        for cluster in clusters:
+            sx = sum(p[0] for p in cluster)
+            sy = sum(p[1] for p in cluster)
+            n = max(1, len(cluster))
+            cluster_centroids.append((sx / n, sy / n))
+
+        self.get_logger().info(
+            f"Clustering applied: {len(ordered_points)} markers -> {len(cluster_centroids)} clusters (radius={radius} m)"
+        )
+
+        return cluster_centroids
 
 def main(args=None):
     rclpy.init(args=args)

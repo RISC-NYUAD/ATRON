@@ -5,16 +5,17 @@
 #include <nav_msgs/msg/path.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 
-#include <ompl-1.7/ompl/geometric/planners/rrt/RRTConnect.h>
-#include <ompl-1.7/ompl/geometric/planners/rrt/RRTstar.h>
-#include <ompl-1.7/ompl/base/spaces/RealVectorStateSpace.h>
-#include <ompl-1.7/ompl/base/spaces/SE2StateSpace.h>
-#include <ompl-1.7/ompl/base/StateValidityChecker.h>
-#include <ompl-1.7/ompl/base/SpaceInformation.h>
-#include <ompl-1.7/ompl/geometric/PathSimplifier.h>
-#include <ompl-1.7/ompl/base/OptimizationObjective.h>
-#include <ompl-1.7/ompl/base/Goal.h>
-#include <ompl-1.7/ompl/base/goals/GoalState.h>
+#include <ompl/geometric/planners/rrt/RRTConnect.h>
+#include <ompl/geometric/planners/rrt/RRTstar.h>
+#include <ompl/geometric/planners/prm/PRMstar.h>
+#include <ompl/base/spaces/RealVectorStateSpace.h>
+#include <ompl/base/spaces/SE2StateSpace.h>
+#include <ompl/base/StateValidityChecker.h>
+#include <ompl/base/SpaceInformation.h>
+#include <ompl/geometric/PathSimplifier.h>
+#include <ompl/base/OptimizationObjective.h>
+#include <ompl/base/Goal.h>
+#include <ompl/base/goals/GoalState.h>
 
 #include <iostream>
 

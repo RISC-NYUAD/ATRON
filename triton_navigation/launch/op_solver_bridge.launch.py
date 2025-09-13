@@ -11,7 +11,8 @@ def generate_launch_description():
             parameters=[{
                 'cost_limit': 50.0,
                 'oplib_file': 'config/problem.oplib',
-                'solution_file': 'config/stats.json'
+                'solution_file': 'config/stats.json',
+                'cluster_radius': 1.5
             }]
         )
     ])

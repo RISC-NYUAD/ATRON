@@ -23,12 +23,11 @@ find_package(tf2_geometry_msgs REQUIRED)
 
 include_directories(
   include
-  /opt/ros/humble/include
-  /opt/ros/humble/include/ompl-1.7
 )
 
 add_executable(path_planning src/path_planning_node.cpp src/path_planning.cpp)
-target_link_libraries(path_planning /opt/ros/humble/lib/x86_64-linux-gnu/libompl.so)
+target_include_directories(path_planning PRIVATE ${OMPL_INCLUDE_DIRS})
+target_link_libraries(path_planning ${OMPL_LIBRARIES})
 ament_target_dependencies(path_planning
   rclcpp
   Eigen3
