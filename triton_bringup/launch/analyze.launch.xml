@@ -7,6 +7,22 @@
     <arg name="slam_config" default="$(find-pkg-share triton_bringup)/config/slam_toolbox.yaml"/>
     <arg name="equirectangular_config" default="$(find-pkg-share triton_bringup)/config/equirectangular.yaml"/>
     <arg name="use_sim_time" default="false"/>
+    
+    <!-- Shared YOLO parameters (set once, used by all cameras) -->
+    <arg name="yolo_confidence_class_0" default="0.6"/>
+    <arg name="yolo_confidence_class_1" default="0.4"/>
+    <arg name="yolo_image_width" default="960"/>
+    <arg name="yolo_image_height" default="960"/>
+    <arg name="yolo_cx" default="480.0"/>
+    <arg name="yolo_cy" default="480.0"/>
+    <arg name="yolo_fx" default="480.0"/>
+    <arg name="yolo_fy" default="480.0"/>
+    <arg name="yolo_fov" default="1.57079632"/>
+    <arg name="yolo_height" default="1.5"/>
+    <arg name="yolo_offset" default="0.1"/>
+    <arg name="yolo_marker_lifetime" default="0.11"/>
+    <arg name="yolo_yaw_bias_deg" default="2.0"/>
+    <arg name="yolo_tracking_enabled" default="false"/>
 
 
     <!-- Visual SLAM -->
@@ -20,14 +36,16 @@
     <!-- Zenoh -->
     <node pkg="rmw_zenoh_cpp" exec="rmw_zenohd" name="zenoh_router"/>
 
-    <!-- IMU -->
-     <node pkg="imu_filter_madgwick" exec="imu_filter_madgwick_node" name="imu_filter" output="screen">
+    <!-- IMU filter disabled during analysis to avoid duplicating /imu/data from bag -->
+    <!-- <node pkg="imu_filter_madgwick" exec="imu_filter_madgwick_node" name="imu_filter" output="screen">
         <param from="$(var imu_config)"/>
-    </node>
+    </node> -->
 
     <!-- Camera-->
     <node pkg="insta360_ros_driver" exec="decoder" name="image_decoder" output="screen"/>
     <!-- <node pkg="triton_bringup" exec="undistort.py" name="undistort" output="screen"/>  -->
+
+    <node pkg="triton_bringup" exec="cubemap.py" name="cubemap"/>
     
 
     <node pkg="insta360_ros_driver" exec="equirectangular_cpp" name="equirectangular_node" output="screen">
@@ -40,18 +58,23 @@
         <param name="output_topic" value='/cubemap_front/detection/image'/>
         <param name="detection_topic" value="/cubemap_front/bbox"/>
         <param name="marker_topic" value="/cubemap_front/detection/markers"/>
-        <param name="image_width" value="960"/>
-        <param name="image_height" value="960"/>
-        <param name="cx" value="480.0"/>
-        <param name="cy" value="480.0"/>
-        <param name="fx" value="480.0"/>
-        <param name="fy" value="480.0"/>
-        <param name="fov" value="1.57079632"/>
-        <param name="height" value="1.3"/>
-        <param name="offset" value="0.1"/>
-        <param name="marker_lifetime" value="0.11"/>
+        <!-- Class-specific confidence thresholds -->
+        <param name="confidence_threshold_class_0" value="$(var yolo_confidence_class_0)"/>
+        <param name="confidence_threshold_class_1" value="$(var yolo_confidence_class_1)"/>
+        <!-- Optional per-camera yaw bias (degrees) to correct small misalignment -->
+        <param name="yaw_bias_deg" value="$(var yolo_yaw_bias_deg)"/>
+        <param name="image_width" value="$(var yolo_image_width)"/>
+        <param name="image_height" value="$(var yolo_image_height)"/>
+        <param name="cx" value="$(var yolo_cx)"/>
+        <param name="cy" value="$(var yolo_cy)"/>
+        <param name="fx" value="$(var yolo_fx)"/>
+        <param name="fy" value="$(var yolo_fy)"/>
+        <param name="fov" value="$(var yolo_fov)"/>
+        <param name="height" value="$(var yolo_height)"/>
+        <param name="offset" value="$(var yolo_offset)"/>
+        <param name="marker_lifetime" value="$(var yolo_marker_lifetime)"/>
         <!-- Disable per-camera tracking since we use global tracking -->
-        <param name="tracking_enabled" value="false"/>
+        <param name="tracking_enabled" value="$(var yolo_tracking_enabled)"/>
     </node>
 
     <node pkg="triton_bringup" exec="yolo.py" name="bounding_box_back">
@@ -59,18 +82,20 @@
         <param name="output_topic" value='/cubemap_back/detection/image'/>
         <param name="detection_topic" value="/cubemap_back/bbox"/>
         <param name="marker_topic" value="/cubemap_back/detection/markers"/>
-        <param name="image_width" value="960"/>
-        <param name="image_height" value="960"/>
-        <param name="cx" value="480.0"/>
-        <param name="cy" value="480.0"/>
-        <param name="fx" value="480.0"/>
-        <param name="fy" value="480.0"/>
-        <param name="fov" value="1.57079632"/>
-        <param name="height" value="1.3"/>
-        <param name="offset" value="0.1"/>
-        <param name="marker_lifetime" value="0.11"/>
-        <!-- Disable per-camera tracking since we use global tracking -->
-        <param name="tracking_enabled" value="false"/>
+        <param name="confidence_threshold_class_0" value="$(var yolo_confidence_class_0)"/>
+        <param name="confidence_threshold_class_1" value="$(var yolo_confidence_class_1)"/>
+        <param name="yaw_bias_deg" value="$(var yolo_yaw_bias_deg)"/>
+        <param name="image_width" value="$(var yolo_image_width)"/>
+        <param name="image_height" value="$(var yolo_image_height)"/>
+        <param name="cx" value="$(var yolo_cx)"/>
+        <param name="cy" value="$(var yolo_cy)"/>
+        <param name="fx" value="$(var yolo_fx)"/>
+        <param name="fy" value="$(var yolo_fy)"/>
+        <param name="fov" value="$(var yolo_fov)"/>
+        <param name="height" value="$(var yolo_height)"/>
+        <param name="offset" value="$(var yolo_offset)"/>
+        <param name="marker_lifetime" value="$(var yolo_marker_lifetime)"/>
+        <param name="tracking_enabled" value="$(var yolo_tracking_enabled)"/>
     </node>
 
      <node pkg="triton_bringup" exec="yolo.py" name="bounding_box_left">
@@ -78,17 +103,20 @@
         <param name="output_topic" value='/cubemap_left/detection/image'/>
         <param name="detection_topic" value="/cubemap_left/bbox"/>
         <param name="marker_topic" value="/cubemap_left/detection/markers"/>
-        <param name="image_width" value="960"/>
-        <param name="image_height" value="960"/>
-        <param name="cx" value="480.0"/>
-        <param name="cy" value="480.0"/>
-        <param name="fx" value="480.0"/>
-        <param name="fy" value="480.0"/>
-        <param name="fov" value="1.57079632"/>
-        <param name="height" value="1.3"/>
-        <param name="offset" value="0.1"/>
-        <param name="marker_lifetime" value="0.11"/>
-        <param name="tracking_enabled" value="false"/>
+        <param name="confidence_threshold_class_0" value="$(var yolo_confidence_class_0)"/>
+        <param name="confidence_threshold_class_1" value="$(var yolo_confidence_class_1)"/>
+        <param name="yaw_bias_deg" value="$(var yolo_yaw_bias_deg)"/>
+        <param name="image_width" value="$(var yolo_image_width)"/>
+        <param name="image_height" value="$(var yolo_image_height)"/>
+        <param name="cx" value="$(var yolo_cx)"/>
+        <param name="cy" value="$(var yolo_cy)"/>
+        <param name="fx" value="$(var yolo_fx)"/>
+        <param name="fy" value="$(var yolo_fy)"/>
+        <param name="fov" value="$(var yolo_fov)"/>
+        <param name="height" value="$(var yolo_height)"/>
+        <param name="offset" value="$(var yolo_offset)"/>
+        <param name="marker_lifetime" value="$(var yolo_marker_lifetime)"/>
+        <param name="tracking_enabled" value="$(var yolo_tracking_enabled)"/>
     </node>
 
      <node pkg="triton_bringup" exec="yolo.py" name="bounding_box_right">
@@ -96,36 +124,44 @@
         <param name="output_topic" value='/cubemap_right/detection/image'/>
         <param name="detection_topic" value="/cubemap_right/bbox"/>
         <param name="marker_topic" value="/cubemap_right/detection/markers"/>
-        <param name="image_width" value="960"/>
-        <param name="image_height" value="960"/>
-        <param name="cx" value="480.0"/>
-        <param name="cy" value="480.0"/>
-        <param name="fx" value="480.0"/>
-        <param name="fy" value="480.0"/>
-        <param name="fov" value="1.57079632"/>
-        <param name="height" value="1.3"/>
-        <param name="offset" value="0.1"/>
-        <param name="marker_lifetime" value="0.11"/>
+        <param name="confidence_threshold_class_0" value="$(var yolo_confidence_class_0)"/>
+        <param name="confidence_threshold_class_1" value="$(var yolo_confidence_class_1)"/>
+        <param name="yaw_bias_deg" value="$(var yolo_yaw_bias_deg)"/>
+        <param name="image_width" value="$(var yolo_image_width)"/>
+        <param name="image_height" value="$(var yolo_image_height)"/>
+        <param name="cx" value="$(var yolo_cx)"/>
+        <param name="cy" value="$(var yolo_cy)"/>
+        <param name="fx" value="$(var yolo_fx)"/>
+        <param name="fy" value="$(var yolo_fy)"/>
+        <param name="fov" value="$(var yolo_fov)"/>
+        <param name="height" value="$(var yolo_height)"/>
+        <param name="offset" value="$(var yolo_offset)"/>
+        <param name="marker_lifetime" value="$(var yolo_marker_lifetime)"/>
         <!-- Disable per-camera tracking since we use global tracking -->
-        <param name="tracking_enabled" value="false"/>
+        <param name="tracking_enabled" value="$(var yolo_tracking_enabled)"/>
     </node>
 
     <!-- Orienteering with Global Tracking and Image Stitching -->
     <node pkg="triton_navigation" exec="orienteering.py" name="orienteering_node">
         <param name="marker_topics" value="[/cubemap_front/detection/markers, /cubemap_back/detection/markers, /cubemap_left/detection/markers, /cubemap_right/detection/markers]"/>
-        <param name="image_topics" value="[/cubemap_left/detection/image, /cubemap_front/detection/image, /cubemap_right/detection/image, /cubemap_back/detection/image]"/>
         <param name="output_topic" value="/combined_markers"/>
-        <param name="stitched_image_topic" value="/stitched_detections"/>
         <param name="output_frame" value="map"/>
         <param name="sync_tolerance" value="0.1"/>
         <param name="transform_timeout" value="0.1"/>
-        <!-- Global tracking parameters -->
         <param name="tracking_enabled" value="true"/>
+        <param name="color_code" value="true"/>
         <param name="max_tracking_age" value="10"/>
-        <param name="min_tracking_hits" value="2"/>
-        <param name="distance_threshold" value="3.0"/>
-        <param name="process_noise" value="0.01"/>
-        <param name="measurement_noise" value="1.0"/>
+        <!-- Require more consistent hits before confirming a track -->
+        <param name="min_tracking_hits" value="4"/>
+        <!-- Slightly tighter spatial association -->
+        <param name="distance_threshold" value="2.0"/>
+        <!-- Heavier smoothing and conservative measurement influence -->
+        <param name="process_noise" value="0.0005"/>
+        <param name="measurement_noise" value="0.8"/>
+        <!-- Advanced tracker tuning: stricter gating and more range/depth inflation -->
+        <param name="mahalanobis_threshold" value="2.5"/>
+        <param name="range_noise_scale" value="0.05"/>
+        <param name="depth_noise_factor" value="3.5"/>
     </node>
 
 
@@ -170,6 +206,7 @@
         <param from="$(var robot_localization_config)"/>
     </node> -->
 
+    <!-- Laser Scan Matcher -->
     <node pkg="ros2_laser_scan_matcher" exec="laser_scan_matcher" name="scan_matcher" output="screen">
         <param name="use_sim_time" value="$(var use_sim_time)"/>
         <param name="base_frame" value="base_link"/>
@@ -181,6 +218,7 @@
     </node>
 
     
+    <!-- SLAM Toolbox -->
     <include file="$(find-pkg-share slam_toolbox)/launch/online_sync_launch.py">
         <arg name="slam_params_file" value="$(var slam_config)"/>
     </include>

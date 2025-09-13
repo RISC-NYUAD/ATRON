@@ -2,7 +2,7 @@ path_following_controller:
   ros__parameters:
     # Lookahead distance for Pure Pursuit (meters)
     # Larger values = smoother paths but less accurate tracking
-    lookahead_distance: 2.0
+    lookahead_distance: 0.2
     
     # Maximum velocities
     max_linear_velocity: 2.0   # m/s
@@ -24,7 +24,7 @@ path_following_controller:
     
     # Maximum distance to accept a new path (meters)
     # Paths starting farther than this from robot are rejected
-    max_path_start_distance: 2.0
+    max_path_start_distance: 0.5
     
     # Minimum path completion before checking goal (0.0 to 1.0)
     # Prevents premature goal detection in cyclic paths

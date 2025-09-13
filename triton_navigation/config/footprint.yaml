@@ -18,10 +18,10 @@ path_planning_node:
     # Planner type: "RRTstar" for optimal paths (slower initial solution, improves over time)
     #               "RRTConnect" for fast initial solution (no optimization)
     # planner_type: "RRTstar"
-    planner_type: "RRTstar"
+    planner_type: "RRTConnect"
     
     # Safety margin in meters - robot will avoid obstacles by at least this distance
-    safety_margin: 0.1
+    safety_margin: 0.5
     
     # Occupancy threshold - cells with values >= this are considered obstacles (0-100)
     occupancy_threshold: 50

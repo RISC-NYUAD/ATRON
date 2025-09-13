@@ -264,9 +264,9 @@ class YoloDetector(Node):
         super().__init__('yolo_detector')
         
         # Declare parameters for model and detection
-        self.declare_parameter('model_path', '/home/john/ros2_ws/src/Triton/triton_bringup/weights/best_real.pt')
+        self.declare_parameter('model_path', '/home/john/ros2_ws/src/Triton/triton_bringup/weights/best.pt')
         self.declare_parameter('confidence_threshold', 0.5)
-        self.declare_parameter('confidence_threshold_class_0', 0.6)  # Buoy
+        self.declare_parameter('confidence_threshold_class_0', 0.65)  # Buoy
         self.declare_parameter('confidence_threshold_class_1', 0.4)  # Can
         self.declare_parameter('image_width', 480)
         self.declare_parameter('image_height', 480)
@@ -328,6 +328,11 @@ class YoloDetector(Node):
             'offset',
             0.5,
             ParameterDescriptor(description='Forward offset for projected points in meters')
+        )
+        self.declare_parameter(
+            'yaw_bias_deg',
+            0.0,
+            ParameterDescriptor(description='Fixed yaw bias in degrees to compensate camera misalignment')
         )
         self.declare_parameter(
             'marker_lifetime',
@@ -394,6 +399,7 @@ class YoloDetector(Node):
         self.height = self.get_parameter('height').get_parameter_value().double_value
         self.offset = self.get_parameter('offset').get_parameter_value().double_value
         self.marker_lifetime = self.get_parameter('marker_lifetime').get_parameter_value().double_value
+        self.yaw_bias_deg = self.get_parameter('yaw_bias_deg').get_parameter_value().double_value
         
         # Get tracking parameters
         self.tracking_enabled = self.get_parameter('tracking_enabled').get_parameter_value().bool_value
@@ -603,6 +609,9 @@ class YoloDetector(Node):
                 pixels = np.column_stack([center_x, bottom_y])
                 pixels_centered = pixels - np.array([self.cx, self.cy])
                 angles = (self.fov/2) * pixels_centered / np.array([self.fx, self.fy])
+                # Apply optional fixed yaw bias to correct small misalignment
+                if self.yaw_bias_deg != 0.0:
+                    angles[:, 0] = angles[:, 0] + (np.pi / 180.0) * self.yaw_bias_deg
                 
                 # Compute z and x for all points at once
                 z_values = self.height / np.tan(angles[:, 1]) + self.offset

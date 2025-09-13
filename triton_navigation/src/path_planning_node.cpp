@@ -939,9 +939,9 @@ private:
             
             margin_marker.pose = cylinder_marker.pose;
             margin_marker.scale.x = 0.03;  // Thinner line
-            margin_marker.color.r = 1.0;   // Yellow color for safety margin
-            margin_marker.color.g = 1.0;
-            margin_marker.color.b = 0.0;
+            margin_marker.color.r = 1.0;   // Purple color for safety margin
+            margin_marker.color.g = 0.0;
+            margin_marker.color.b = 1.0;
             margin_marker.color.a = 0.5;
             
             // Generate safety margin polygon

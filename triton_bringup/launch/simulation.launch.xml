@@ -26,6 +26,9 @@
     <!-- Zenoh -->
     <!-- <node pkg="rmw_zenoh_cpp" exec="rmw_zenohd" name="zenoh_router"/> -->
 
+    <!-- Foxglove -->
+    <!-- <include file="$(find-pkg-share foxglove_bridge)/launch/foxglove_bridge_launch.xml"/> -->
+
     <!-- Robot Description -->
     <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher">
         <param name="use_sim_time" value="$(var use_sim_time)"/>
@@ -92,7 +95,7 @@
         <param name="fy" value="240.0"/>
         <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
-        <param name="color_code" value="true"/>
+        <param name="color_code" value="false"/>
         <param name="camera_direction" value="front"/>
     </node>
     <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_back">
@@ -108,7 +111,7 @@
         <param name="fy" value="240.0"/>
         <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
-        <param name="color_code" value="true"/>
+        <param name="color_code" value="false"/>
         <param name="camera_direction" value="back"/>
     </node>
     <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_left">
@@ -124,7 +127,7 @@
         <param name="fy" value="240.0"/>
         <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
-        <param name="color_code" value="true"/>
+        <param name="color_code" value="false"/>
         <param name="camera_direction" value="left"/>
     </node>
     <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_right">
@@ -140,7 +143,7 @@
         <param name="fy" value="240.0"/>
         <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
-        <param name="color_code" value="true"/>
+        <param name="color_code" value="false"/>
         <param name="camera_direction" value="right"/>
     </node>
 
@@ -151,8 +154,8 @@
         <param name="output_frame" value="map"/>
         <param name="sync_tolerance" value="0.1"/>
         <param name="transform_timeout" value="0.1"/>
-        <param name="tracking_enabled" value="true"/>
-        <param name="color_code" value="true"/>
+        <param name="tracking_enabled" value="false"/>
+        <param name="color_code" value="false"/>
         <param name="max_tracking_age" value="10"/>
         <param name="min_tracking_hits" value="2"/>
         <param name="distance_threshold" value="3.0"/>
