@@ -75,5 +75,12 @@ while True:
     ih.spin_once()
 ```
 
-## Bringup
-TODO
+## Orienteering
+```
+cd ~/ros2_ws/src/Triton/triton_navigation/config
+ros2 service call /export_oplib std_srvs/srv/Trigger
+./../../dependencies/op_solver_ros/op-solver/build/src/op-solver opt --op-exact 0 problem.oplib
+ros2 service call /create_waypoints std_srvs/srv/Trigger
+ros2 service call /generate_path std_srvs/srv/Trigger
+ros2 service call /navigate std_srvs/srv/Empty
+```

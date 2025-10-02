@@ -140,9 +140,10 @@ class TrackedObject:
 
 class GlobalTracker:
     """Global multi-object tracker that handles detections from multiple cameras"""
-    def __init__(self, max_age=10, min_hits=3, distance_threshold=2.0,
+    def __init__(self, max_age=10, min_hits=3, distance_threshold=1.5,
                  process_noise=0.01, measurement_noise=1.0,
-                 mahalanobis_threshold=3.5, range_noise_scale=0.02, depth_noise_factor=2.5):
+                 mahalanobis_threshold=3.5, range_noise_scale=0.02, depth_noise_factor=2.5,
+                 class_distance_thresholds=None, class_mahalanobis_thresholds=None):
         self.max_age = max_age
         self.min_hits = min_hits
         self.distance_threshold = distance_threshold
@@ -155,6 +156,10 @@ class GlobalTracker:
         self.next_id = 0
         # Position averaging window for stationary objects
         self.position_memory = {}  # track_id -> list of recent positions
+        # Allow class-specific clustering distances (e.g. tighter for cans near each other)
+        self.class_distance_thresholds = class_distance_thresholds or {}
+        # Allow per-class gating to keep tightly packed debris from merging into one track
+        self.class_mahalanobis_thresholds = class_mahalanobis_thresholds or {}
 
     def _measurement_covariance(self, position):
         """Build measurement covariance R based on range. Larger range => higher variance.
@@ -178,8 +183,8 @@ class GlobalTracker:
         for track in self.tracks:
             track.predict(current_time)
             
-        # Group detections by approximate location to handle multi-camera overlap
-        # For stationary objects, detections within 1.5m are likely the same object
+        # Group detections by approximate location to handle multi-camera overlap.
+        # Thresholds are class-aware so debris can effectively skip merging when set near zero.
         detection_groups = []
         used_detections = set()
         
@@ -195,9 +200,21 @@ class GlobalTracker:
                     continue
                     
                 # Check if detections are close and same class
+                if det1['class_id'] != det2['class_id']:
+                    continue
+
                 dist = np.linalg.norm(np.array(det1['position']) - np.array(det2['position']))
-                # Use larger threshold for stationary objects seen by multiple cameras
-                if dist < 1.5 and det1['class_id'] == det2['class_id']:
+                threshold = self.class_distance_thresholds.get(
+                    det1['class_id'],
+                    self.distance_threshold
+                )
+
+                # Threshold <= 0 disables grouping for this class (treat every detection as unique)
+                if threshold <= 0.0:
+                    continue
+
+                # Use configured threshold to decide whether detections belong together
+                if dist < threshold:
                     group.append(j)
                     used_detections.add(j)
                     
@@ -276,7 +293,15 @@ class GlobalTracker:
             for d, t in zip(row_ind, col_ind):
                 det = merged_detections[d]
                 # Accept match only if inside Mahalanobis gate
-                if distance_matrix[d, t] < self.mahalanobis_threshold:
+                gate = self.class_mahalanobis_thresholds.get(
+                    self.tracks[t].class_id,
+                    self.mahalanobis_threshold
+                )
+
+                if gate <= 0.0:
+                    continue  # Explicitly disable matching for this class if requested
+
+                if distance_matrix[d, t] < gate:
                     R = self._measurement_covariance(det['position'])
                     self.tracks[t].update(
                         det['position'],
@@ -408,14 +433,30 @@ class OrienteeringNode(Node):
         self.declare_parameter('min_tracking_hits', 3)
         self.min_tracking_hits = self.get_parameter('min_tracking_hits').get_parameter_value().integer_value
         
-        self.declare_parameter('distance_threshold', 2.0)
+        self.declare_parameter('distance_threshold', 1.5)
         self.distance_threshold = self.get_parameter('distance_threshold').get_parameter_value().double_value
-        
+
         self.declare_parameter('process_noise', 0.1)
         self.process_noise = self.get_parameter('process_noise').get_parameter_value().double_value
-        
+
         self.declare_parameter('measurement_noise', 1.0)
         self.measurement_noise = self.get_parameter('measurement_noise').get_parameter_value().double_value
+
+        # Allow class-specific clustering thresholds (useful when objects are tightly grouped)
+        self.declare_parameter('debris_distance_threshold', 0.0)
+        self.debris_distance_threshold = self.get_parameter('debris_distance_threshold').get_parameter_value().double_value
+        self.class_distance_thresholds = {}
+        self.class_distance_thresholds[1] = self.debris_distance_threshold
+
+        # Allow class-specific gating for tracker association to avoid merging neighbouring debris
+        self.declare_parameter('debris_mahalanobis_threshold', 0.6)
+        self.debris_mahalanobis_threshold = self.get_parameter('debris_mahalanobis_threshold').get_parameter_value().double_value
+        self.class_mahalanobis_thresholds = {}
+        self.class_mahalanobis_thresholds[1] = self.debris_mahalanobis_threshold
+
+        # Toggle optional visualization of tracking labels above markers
+        self.declare_parameter('show_track_labels', False)
+        self.show_track_labels = self.get_parameter('show_track_labels').get_parameter_value().bool_value
         
         # Declare color coding parameter
         self.declare_parameter('color_code', False)
@@ -474,7 +515,9 @@ class OrienteeringNode(Node):
                 measurement_noise=self.measurement_noise,
                 mahalanobis_threshold=mahal,
                 range_noise_scale=rn_scale,
-                depth_noise_factor=depth_factor
+                depth_noise_factor=depth_factor,
+                class_distance_thresholds=self.class_distance_thresholds,
+                class_mahalanobis_thresholds=self.class_mahalanobis_thresholds
             )
             self.previous_track_ids = set()
         else:
@@ -731,15 +774,16 @@ class OrienteeringNode(Node):
                 delete_marker.ns = "global_tracked_objects"
                 delete_marker.action = Marker.DELETE
                 combined_array.markers.append(delete_marker)
-                
-                # Delete text label marker
-                delete_text_marker = Marker()
-                delete_text_marker.header.frame_id = self.output_frame
-                delete_text_marker.header.stamp = self.get_clock().now().to_msg()
-                delete_text_marker.id = track_id + 10000
-                delete_text_marker.ns = "global_tracked_labels"
-                delete_text_marker.action = Marker.DELETE
-                combined_array.markers.append(delete_text_marker)
+
+                if self.show_track_labels:
+                    # Delete text label marker
+                    delete_text_marker = Marker()
+                    delete_text_marker.header.frame_id = self.output_frame
+                    delete_text_marker.header.stamp = self.get_clock().now().to_msg()
+                    delete_text_marker.id = track_id + 10000
+                    delete_text_marker.ns = "global_tracked_labels"
+                    delete_text_marker.action = Marker.DELETE
+                    combined_array.markers.append(delete_text_marker)
                 
                 self.get_logger().debug(f'Deleted global track {track_id}')
             
@@ -800,26 +844,27 @@ class OrienteeringNode(Node):
                 
                 marker.lifetime = rclpy.duration.Duration(seconds=0.5).to_msg()
                 marker.action = Marker.ADD
-                
-                # Add text marker with track info
-                text_marker = Marker()
-                text_marker.header = marker.header
-                text_marker.id = track['id'] + 10000  # Offset for text markers
-                text_marker.ns = "global_tracked_labels"
-                text_marker.type = Marker.TEXT_VIEW_FACING
-                text_marker.text = f"ID: {track['id']}\nCams: {', '.join(track['source_cameras'])}"
-                text_marker.pose = marker.pose
-                # text_marker.pose.position.z += 0.5  # Offset above marker
-                text_marker.scale.z = 0.2
-                text_marker.color.r = 1.0
-                text_marker.color.g = 1.0
-                text_marker.color.b = 1.0
-                text_marker.color.a = 1.0
-                text_marker.lifetime = marker.lifetime
-                text_marker.action = Marker.ADD
-                
+
                 combined_array.markers.append(marker)
-                combined_array.markers.append(text_marker)
+
+                if self.show_track_labels:
+                    # Add text marker with track info
+                    text_marker = Marker()
+                    text_marker.header = marker.header
+                    text_marker.id = track['id'] + 10000  # Offset for text markers
+                    text_marker.ns = "global_tracked_labels"
+                    text_marker.type = Marker.TEXT_VIEW_FACING
+                    text_marker.text = f"ID: {track['id']}\nCams: {', '.join(track['source_cameras'])}"
+                    text_marker.pose = marker.pose
+                    # text_marker.pose.position.z += 0.5  # Offset above marker
+                    text_marker.scale.z = 0.2
+                    text_marker.color.r = 1.0
+                    text_marker.color.g = 1.0
+                    text_marker.color.b = 1.0
+                    text_marker.color.a = 1.0
+                    text_marker.lifetime = marker.lifetime
+                    text_marker.action = Marker.ADD
+                    combined_array.markers.append(text_marker)
                 
                 self.get_logger().debug(f'Global track {track["id"]}: class={track["class_id"]}, pos=({track["position"][0]:.2f}, {track["position"][1]:.2f}, {track["position"][2]:.2f}), cameras={track["source_cameras"]}')
         

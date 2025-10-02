@@ -22,7 +22,7 @@
     <arg name="yolo_offset" default="0.1"/>
     <arg name="yolo_marker_lifetime" default="0.11"/>
     <arg name="yolo_yaw_bias_deg" default="2.0"/>
-    <arg name="yolo_tracking_enabled" default="false"/>
+    <arg name="yolo_tracking_enabled" default="true"/>
 
 
     <!-- Visual SLAM -->
@@ -34,7 +34,7 @@
     </node>
 
     <!-- Zenoh -->
-    <node pkg="rmw_zenoh_cpp" exec="rmw_zenohd" name="zenoh_router"/>
+    <!-- <node pkg="rmw_zenoh_cpp" exec="rmw_zenohd" name="zenoh_router"/> -->
 
     <!-- IMU filter disabled during analysis to avoid duplicating /imu/data from bag -->
     <!-- <node pkg="imu_filter_madgwick" exec="imu_filter_madgwick_node" name="imu_filter" output="screen">
@@ -46,6 +46,7 @@
     <!-- <node pkg="triton_bringup" exec="undistort.py" name="undistort" output="screen"/>  -->
 
     <node pkg="triton_bringup" exec="cubemap.py" name="cubemap"/>
+    <node pkg="triton_bringup" exec="bottom_view.py" name="bottom_view"/>
     
 
     <node pkg="insta360_ros_driver" exec="equirectangular_cpp" name="equirectangular_node" output="screen">
@@ -207,7 +208,7 @@
     </node> -->
 
     <!-- Laser Scan Matcher -->
-    <node pkg="ros2_laser_scan_matcher" exec="laser_scan_matcher" name="scan_matcher" output="screen">
+    <!-- <node pkg="ros2_laser_scan_matcher" exec="laser_scan_matcher" name="scan_matcher" output="screen">
         <param name="use_sim_time" value="$(var use_sim_time)"/>
         <param name="base_frame" value="base_link"/>
         <param name="odom_frame" value="odom"/>
@@ -215,16 +216,16 @@
         <param name="laser_frame" value="laser_frame"/>
         <param name="publish_odom" value="odom"/>
         <param name="publish_tf" value="true"/>
-    </node>
+    </node> -->
 
     
     <!-- SLAM Toolbox -->
-    <include file="$(find-pkg-share slam_toolbox)/launch/online_sync_launch.py">
+    <!-- <include file="$(find-pkg-share slam_toolbox)/launch/online_sync_launch.py">
         <arg name="slam_params_file" value="$(var slam_config)"/>
-    </include>
+    </include> -->
 
-    <node pkg="robot_localization" exec="ekf_node" name="ekf_node" output="screen">
+    <!-- <node pkg="robot_localization" exec="ekf_node" name="ekf_node" output="screen">
         <param from="$(var robot_localization_config)"/>
-    </node>
+    </node> -->
 
 </launch>

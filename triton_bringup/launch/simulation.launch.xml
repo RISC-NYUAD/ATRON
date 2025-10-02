@@ -154,8 +154,8 @@
         <param name="output_frame" value="map"/>
         <param name="sync_tolerance" value="0.1"/>
         <param name="transform_timeout" value="0.1"/>
-        <param name="tracking_enabled" value="false"/>
-        <param name="color_code" value="false"/>
+        <param name="tracking_enabled" value="true"/>
+        <param name="color_code" value="true"/>
         <param name="max_tracking_age" value="10"/>
         <param name="min_tracking_hits" value="2"/>
         <param name="distance_threshold" value="3.0"/>

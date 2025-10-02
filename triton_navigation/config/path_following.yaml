@@ -2,7 +2,7 @@ path_following_controller:
   ros__parameters:
     # Lookahead distance for Pure Pursuit (meters)
     # Larger values = smoother paths but less accurate tracking
-    lookahead_distance: 0.2
+    lookahead_distance: 0.5
     
     # Maximum velocities
     max_linear_velocity: 2.0   # m/s
