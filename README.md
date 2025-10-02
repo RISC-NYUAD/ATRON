@@ -2,7 +2,12 @@
 
 This repo contains instructions for how to use the Isaac SIM simulation for the Atron USV autonomous debris collection vehicle.
 
-![isaac_sim.png](docs/isaac_sim.png)
+<div align="center">
+
+[![Atron](docs/atron.png)](https://youtu.be/WVKWoPhqZnQ)  
+[Youtube Link](https://youtu.be/WVKWoPhqZnQ)
+
+</div>
 
 ## Installation
 
@@ -15,9 +20,16 @@ rosdep install --from-path src --ignore-src -r -y
 colcon build --symlink-install && source install/setup.bash
 echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
 ```
-## Simulation
-### Usage
-1. Run the simulation in Isaac Sim using the file in <code>triton_isaac/isaac/Collected_competition_world/competition_world.usd</code>
+
+## Usage
+1. Run the simulation in Isaac Sim using the file in 
+```
+isaac/atron_simulation.usd
+```
+
+![isaac_sim.png](docs/isaac_sim.png)
+
+
 2. Run the autonomous routine using:
 
 ```
