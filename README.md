@@ -14,7 +14,7 @@ This repo contains instructions for how to use the Isaac SIM simulation for the 
 ```
 mkdir -p ros2_ws/src
 cd src
-git clone https://github.com/RISC-NYUAD/Triton
+git clone https://github.com/RISC-NYUAD/ATRON
 cd ../
 rosdep install --from-path src --ignore-src -r -y
 colcon build --symlink-install && source install/setup.bash
