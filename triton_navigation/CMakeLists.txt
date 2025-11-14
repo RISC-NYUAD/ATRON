@@ -67,6 +67,7 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   scripts/orienteering.py
   scripts/op_solver_bridge.py
+  scripts/pid.py
   DESTINATION lib/${PROJECT_NAME}
 )
 ament_package()
