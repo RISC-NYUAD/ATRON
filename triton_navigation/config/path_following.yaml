@@ -17,7 +17,7 @@ path_following_controller:
     
     # Angular velocity gain - higher values = more aggressive turning
     # Reduce this if robot is spinning/oscillating
-    angular_velocity_gain: 3.0
+    angular_velocity_gain: 30.0
     
     # Slowdown radius - start slowing down when this close to goal (meters)
     slowdown_radius: 0.5
@@ -30,3 +30,9 @@ path_following_controller:
     # Prevents premature goal detection in cyclic paths
     # 0.8 = must complete at least 80% of path before goal check
     min_path_completion: 0.8
+
+    # Controller type:
+    # - "pure_pursuit": original behavior (allows simultaneous turn + forward)
+    # - "point_turn": only turn in place or drive straight
+    # - "bezier": follow a Bezier-smoothed version of the path and publish it on /bezier_path
+    controller_type: "bezier"

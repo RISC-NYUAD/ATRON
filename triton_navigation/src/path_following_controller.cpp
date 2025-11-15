@@ -9,6 +9,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <cmath>
 #include <algorithm>
+#include <string>
 
 class PathFollowingController : public rclcpp::Node
 {
@@ -26,6 +27,7 @@ public:
         this->declare_parameter("slowdown_radius", 0.5);
         this->declare_parameter("max_path_start_distance", 2.0);
         this->declare_parameter("min_path_completion", 0.8);
+        this->declare_parameter("controller_type", std::string("pure_pursuit"));
 
         // Get parameters
         lookahead_distance_ = this->get_parameter("lookahead_distance").as_double();
@@ -38,6 +40,15 @@ public:
         slowdown_radius_ = this->get_parameter("slowdown_radius").as_double();
         max_path_start_distance_ = this->get_parameter("max_path_start_distance").as_double();
         min_path_completion_ = this->get_parameter("min_path_completion").as_double();
+        controller_type_ = this->get_parameter("controller_type").as_string();
+        if (controller_type_ != "pure_pursuit" &&
+            controller_type_ != "point_turn" &&
+            controller_type_ != "bezier") {
+            RCLCPP_WARN(this->get_logger(),
+                        "Unknown controller_type '%s', defaulting to 'pure_pursuit'",
+                        controller_type_.c_str());
+            controller_type_ = "pure_pursuit";
+        }
 
         // Initialize TF2
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
@@ -46,6 +57,7 @@ public:
         // Publishers and Subscribers
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
         navigation_active_pub_ = this->create_publisher<std_msgs::msg::Bool>("/navigation_active", 10);
+        bezier_path_pub_ = this->create_publisher<nav_msgs::msg::Path>("/bezier_path", 10);
         
         // Subscribe to both planned_path and combined_path for compatibility
         path_sub_ = this->create_subscription<nav_msgs::msg::Path>(
@@ -78,6 +90,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "Max linear velocity: %.2f m/s", max_linear_velocity_);
         RCLCPP_INFO(this->get_logger(), "Max angular velocity: %.2f rad/s", max_angular_velocity_);
         RCLCPP_INFO(this->get_logger(), "Min path completion: %.0f%% (for cyclic paths)", min_path_completion_ * 100.0);
+        RCLCPP_INFO(this->get_logger(), "Controller type: %s", controller_type_.c_str());
         RCLCPP_INFO(this->get_logger(), "Navigation is initially DISABLED. Call /navigate service to start.");
     }
 
@@ -177,7 +190,19 @@ private:
         double goal_distance = std::hypot(goal_x - robot_x, goal_y - robot_y);
 
         // Calculate path progress percentage
-        double progress_percentage = (double)path_index_ / (double)interpolated_path_.poses.size();
+        size_t active_path_size = interpolated_path_.poses.size();
+        if (controller_type_ == "bezier" && !bezier_path_.poses.empty()) {
+            active_path_size = bezier_path_.poses.size();
+        }
+        if (active_path_size == 0) {
+            RCLCPP_WARN(this->get_logger(), "Active path is empty while navigation is enabled");
+            stopRobot();
+            navigation_enabled_ = false;
+            publishNavigationStatus(false);
+            return;
+        }
+        double progress_percentage = static_cast<double>(path_index_) /
+                                     static_cast<double>(active_path_size);
         
         // For cyclic paths, ensure we've traversed at least min_path_completion_ before checking goal
         if (goal_distance < goal_tolerance_ && progress_percentage > min_path_completion_) {
@@ -198,7 +223,7 @@ private:
             return;
         }
 
-        // Calculate control commands using Pure Pursuit
+        // Calculate control commands using selected controller
         geometry_msgs::msg::Twist cmd_vel;
         calculateVelocityCommand(robot_x, robot_y, robot_yaw, lookahead_point, 
                                 goal_distance, cmd_vel);
@@ -210,13 +235,22 @@ private:
     bool findLookaheadPoint(double robot_x, double robot_y, 
                             geometry_msgs::msg::Point& lookahead_point)
     {
+        const nav_msgs::msg::Path* path = &interpolated_path_;
+        if (controller_type_ == "bezier" && !bezier_path_.poses.empty()) {
+            path = &bezier_path_;
+        }
+
+        if (path->poses.empty()) {
+            return false;
+        }
+
         // Find closest point on interpolated path
         double min_distance = std::numeric_limits<double>::max();
         size_t closest_index = 0;
         
-        for (size_t i = 0; i < interpolated_path_.poses.size(); ++i) {
-            double dx = interpolated_path_.poses[i].pose.position.x - robot_x;
-            double dy = interpolated_path_.poses[i].pose.position.y - robot_y;
+        for (size_t i = 0; i < path->poses.size(); ++i) {
+            double dx = path->poses[i].pose.position.x - robot_x;
+            double dy = path->poses[i].pose.position.y - robot_y;
             double distance = std::hypot(dx, dy);
             
             if (distance < min_distance) {
@@ -237,13 +271,13 @@ private:
         }
 
         // Find lookahead point starting from closest point
-        for (size_t i = closest_index; i < interpolated_path_.poses.size(); ++i) {
-            double dx = interpolated_path_.poses[i].pose.position.x - robot_x;
-            double dy = interpolated_path_.poses[i].pose.position.y - robot_y;
+        for (size_t i = closest_index; i < path->poses.size(); ++i) {
+            double dx = path->poses[i].pose.position.x - robot_x;
+            double dy = path->poses[i].pose.position.y - robot_y;
             double distance = std::hypot(dx, dy);
             
             if (distance >= lookahead_distance_) {
-                lookahead_point = interpolated_path_.poses[i].pose.position;
+                lookahead_point = path->poses[i].pose.position;
                 return true;
             }
         }
@@ -276,39 +310,78 @@ private:
         while (yaw_error > M_PI) yaw_error -= 2.0 * M_PI;
         while (yaw_error < -M_PI) yaw_error += 2.0 * M_PI;
 
-        // Pure Pursuit: Calculate curvature
-        // For differential drive, we can use a simpler approach
-        double angular_velocity = angular_velocity_gain_ * yaw_error;
-        
-        // Limit angular velocity
-        angular_velocity = std::clamp(angular_velocity, 
-                                     -max_angular_velocity_, 
-                                     max_angular_velocity_);
+        if (controller_type_ == "point_turn") {
+            const double yaw_threshold = 0.1;
 
-        // Calculate linear velocity
-        double linear_velocity;
-        
-        // If we need to turn a lot (> 90 degrees), stop and turn in place
-        if (std::abs(yaw_error) > M_PI / 2.0) {
-            linear_velocity = 0.0;
-            RCLCPP_DEBUG(this->get_logger(), "Large yaw error %.2f rad, turning in place", yaw_error);
-        } else {
-            // Slow down based on angular velocity (can't go fast while turning sharp)
+            cmd_vel.linear.x = 0.0;
+            cmd_vel.angular.z = 0.0;
+
+            if (std::abs(yaw_error) > yaw_threshold) {
+                double angular_velocity = angular_velocity_gain_ * yaw_error;
+                angular_velocity = std::clamp(angular_velocity,
+                                              -max_angular_velocity_,
+                                              max_angular_velocity_);
+                cmd_vel.angular.z = angular_velocity;
+            } else {
+                double linear_velocity = max_linear_velocity_;
+
+                if (goal_distance < slowdown_radius_) {
+                    double slowdown_factor = goal_distance / slowdown_radius_;
+                    linear_velocity *= slowdown_factor;
+                }
+
+                linear_velocity = std::max(linear_velocity, min_linear_velocity_);
+
+                cmd_vel.linear.x = linear_velocity;
+                cmd_vel.angular.z = 0.0;
+            }
+        } else if (controller_type_ == "bezier") {
+            // Use a smooth controller similar to pure pursuit,
+            // but without the large-angle turn-in-place threshold.
+            double angular_velocity = angular_velocity_gain_ * yaw_error;
+            angular_velocity = std::clamp(angular_velocity,
+                                          -max_angular_velocity_,
+                                          max_angular_velocity_);
+
             double angular_factor = 1.0 - std::min(std::abs(angular_velocity) / max_angular_velocity_, 1.0);
-            linear_velocity = min_linear_velocity_ + 
-                            (max_linear_velocity_ - min_linear_velocity_) * angular_factor;
-        }
+            double linear_velocity = min_linear_velocity_ +
+                                     (max_linear_velocity_ - min_linear_velocity_) * angular_factor;
 
-        // Slow down near goal
-        if (goal_distance < slowdown_radius_) {
-            double slowdown_factor = goal_distance / slowdown_radius_;
-            linear_velocity *= slowdown_factor;
-            linear_velocity = std::max(linear_velocity, min_linear_velocity_);
-        }
+            if (goal_distance < slowdown_radius_) {
+                double slowdown_factor = goal_distance / slowdown_radius_;
+                linear_velocity *= slowdown_factor;
+                linear_velocity = std::max(linear_velocity, min_linear_velocity_);
+            }
 
-        // Set command velocities
-        cmd_vel.linear.x = linear_velocity;
-        cmd_vel.angular.z = angular_velocity;
+            cmd_vel.linear.x = linear_velocity;
+            cmd_vel.angular.z = angular_velocity;
+        } else {
+            double angular_velocity = angular_velocity_gain_ * yaw_error;
+            
+            angular_velocity = std::clamp(angular_velocity, 
+                                         -max_angular_velocity_, 
+                                         max_angular_velocity_);
+
+            double linear_velocity;
+            
+            if (std::abs(yaw_error) > M_PI / 2.0) {
+                linear_velocity = 0.0;
+                RCLCPP_DEBUG(this->get_logger(), "Large yaw error %.2f rad, turning in place", yaw_error);
+            } else {
+                double angular_factor = 1.0 - std::min(std::abs(angular_velocity) / max_angular_velocity_, 1.0);
+                linear_velocity = min_linear_velocity_ + 
+                                (max_linear_velocity_ - min_linear_velocity_) * angular_factor;
+            }
+
+            if (goal_distance < slowdown_radius_) {
+                double slowdown_factor = goal_distance / slowdown_radius_;
+                linear_velocity *= slowdown_factor;
+                linear_velocity = std::max(linear_velocity, min_linear_velocity_);
+            }
+
+            cmd_vel.linear.x = linear_velocity;
+            cmd_vel.angular.z = angular_velocity;
+        }
     }
 
     void stopRobot()
@@ -339,6 +412,16 @@ private:
         
         navigation_enabled_ = true;
         path_index_ = 0;  // Reset to start of path
+        if (controller_type_ == "bezier") {
+            generateBezierPath();
+            if (!bezier_path_.poses.empty()) {
+                bezier_path_pub_->publish(bezier_path_);
+                RCLCPP_INFO(this->get_logger(), "Published Bezier path with %zu poses",
+                            bezier_path_.poses.size());
+            } else {
+                RCLCPP_WARN(this->get_logger(), "Bezier controller selected but Bezier path is empty");
+            }
+        }
         publishNavigationStatus(true);
         RCLCPP_INFO(this->get_logger(), "Navigation ENABLED - starting to follow path");
     }
@@ -410,9 +493,116 @@ private:
         interpolated_path_.poses.push_back(current_path_.poses.back());
     }
 
+    void generateBezierPath()
+    {
+        bezier_path_.poses.clear();
+        bezier_path_.header = current_path_.header;
+
+        const auto& input_path = current_path_;
+        size_t n = input_path.poses.size();
+
+        if (n == 0) {
+            return;
+        }
+
+        if (n == 1) {
+            bezier_path_ = input_path;
+            return;
+        }
+
+        const int samples_per_segment = 10;
+        double last_yaw = 0.0;
+        bool has_last_yaw = false;
+
+        auto getPoint = [&](int index) -> geometry_msgs::msg::Point
+        {
+            if (index < 0) {
+                index = 0;
+            } else if (static_cast<size_t>(index) >= n) {
+                index = static_cast<int>(n - 1);
+            }
+            return input_path.poses[static_cast<size_t>(index)].pose.position;
+        };
+
+        for (size_t i = 0; i < n - 1; ++i) {
+            geometry_msgs::msg::Point Pm1 = getPoint(static_cast<int>(i) - 1);
+            geometry_msgs::msg::Point P0 = getPoint(static_cast<int>(i));
+            geometry_msgs::msg::Point P1 = getPoint(static_cast<int>(i) + 1);
+            geometry_msgs::msg::Point P2 = getPoint(static_cast<int>(i) + 2);
+
+            geometry_msgs::msg::Point C0 = P0;
+            geometry_msgs::msg::Point C3 = P1;
+
+            geometry_msgs::msg::Point C1;
+            C1.x = P0.x + (P1.x - Pm1.x) / 6.0;
+            C1.y = P0.y + (P1.y - Pm1.y) / 6.0;
+            C1.z = P0.z;
+
+            geometry_msgs::msg::Point C2;
+            C2.x = P1.x - (P2.x - P0.x) / 6.0;
+            C2.y = P1.y - (P2.y - P0.y) / 6.0;
+            C2.z = P1.z;
+
+            for (int s = 0; s < samples_per_segment; ++s) {
+                double t = static_cast<double>(s) / static_cast<double>(samples_per_segment);
+                double one_minus_t = 1.0 - t;
+
+                double b0 = one_minus_t * one_minus_t * one_minus_t;
+                double b1 = 3.0 * one_minus_t * one_minus_t * t;
+                double b2 = 3.0 * one_minus_t * t * t;
+                double b3 = t * t * t;
+
+                double x = b0 * C0.x + b1 * C1.x + b2 * C2.x + b3 * C3.x;
+                double y = b0 * C0.y + b1 * C1.y + b2 * C2.y + b3 * C3.y;
+                double z = b0 * C0.z + b1 * C1.z + b2 * C2.z + b3 * C3.z;
+
+                double dx = 3.0 * one_minus_t * one_minus_t * (C1.x - C0.x) +
+                            6.0 * one_minus_t * t * (C2.x - C1.x) +
+                            3.0 * t * t * (C3.x - C2.x);
+                double dy = 3.0 * one_minus_t * one_minus_t * (C1.y - C0.y) +
+                            6.0 * one_minus_t * t * (C2.y - C1.y) +
+                            3.0 * t * t * (C3.y - C2.y);
+
+                double yaw;
+                if (std::abs(dx) > 1e-6 || std::abs(dy) > 1e-6) {
+                    yaw = std::atan2(dy, dx);
+                    last_yaw = yaw;
+                    has_last_yaw = true;
+                } else if (has_last_yaw) {
+                    yaw = last_yaw;
+                } else {
+                    yaw = 0.0;
+                }
+
+                geometry_msgs::msg::PoseStamped pose;
+                pose.header = input_path.header;
+                pose.pose.position.x = x;
+                pose.pose.position.y = y;
+                pose.pose.position.z = z;
+                pose.pose.orientation.w = std::cos(yaw / 2.0);
+                pose.pose.orientation.x = 0.0;
+                pose.pose.orientation.y = 0.0;
+                pose.pose.orientation.z = std::sin(yaw / 2.0);
+
+                bezier_path_.poses.push_back(pose);
+            }
+        }
+
+        // Ensure the final goal point is included exactly
+        const auto& goal_pose = input_path.poses.back();
+        geometry_msgs::msg::PoseStamped final_pose = goal_pose;
+        double final_yaw = last_yaw;
+        final_pose.pose.orientation.w = std::cos(final_yaw / 2.0);
+        final_pose.pose.orientation.x = 0.0;
+        final_pose.pose.orientation.y = 0.0;
+        final_pose.pose.orientation.z = std::sin(final_yaw / 2.0);
+        bezier_path_.poses.push_back(final_pose);
+    }
+
     // ROS2 interfaces
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr navigation_active_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr bezier_path_pub_;
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_sub_;
     rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr combined_path_sub_;
     rclcpp::TimerBase::SharedPtr control_timer_;
@@ -426,6 +616,7 @@ private:
     // Path following state
     nav_msgs::msg::Path current_path_;
     nav_msgs::msg::Path interpolated_path_;  // Dense interpolated path
+    nav_msgs::msg::Path bezier_path_;        // Bezier-smoothed path
     size_t path_index_ = 0;
     bool navigation_enabled_ = false;
 
@@ -439,6 +630,7 @@ private:
     double slowdown_radius_;
     double max_path_start_distance_;
     double min_path_completion_;
+    std::string controller_type_;
 };
 
 int main(int argc, char** argv)
