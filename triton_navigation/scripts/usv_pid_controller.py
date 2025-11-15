@@ -45,7 +45,7 @@ class USVPIDController(Node):
         
         # Hardcoded parameter defaults
         # Linear velocity PID gains
-        self.Kp_linear = 150.0
+        self.Kp_linear = 50.0
         self.Ki_linear = 200.0
         self.Kd_linear = 15.0
         
@@ -116,7 +116,7 @@ class USVPIDController(Node):
         
         self.odom_sub = self.create_subscription(
             Odometry,
-            '/odometry/filtered',
+            '/odom_true',
             self.odom_callback,
             10
         )

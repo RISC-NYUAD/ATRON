@@ -2,12 +2,12 @@ path_following_controller:
   ros__parameters:
     # Lookahead distance for Pure Pursuit (meters)
     # Larger values = smoother paths but less accurate tracking
-    lookahead_distance: 0.5
+    lookahead_distance: 1.0
     
     # Maximum velocities
-    max_linear_velocity: 0.5   # m/s
+    max_linear_velocity: 1.0   # m/s
     max_angular_velocity: 0.3  # rad/s
-    min_linear_velocity: 0.1   # m/s - minimum speed to avoid getting stuck
+    min_linear_velocity: 0.01   # m/s - minimum speed to avoid getting stuck
     
     # Goal tolerance - stop when within this distance of goal (meters)
     goal_tolerance: 1.0
@@ -17,7 +17,7 @@ path_following_controller:
     
     # Angular velocity gain - higher values = more aggressive turning
     # Reduce this if robot is spinning/oscillating
-    angular_velocity_gain: 30.0
+    angular_velocity_gain: 2.0
     
     # Slowdown radius - start slowing down when this close to goal (meters)
     slowdown_radius: 0.5
