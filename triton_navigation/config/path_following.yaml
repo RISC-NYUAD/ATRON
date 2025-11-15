@@ -2,7 +2,7 @@ path_following_controller:
   ros__parameters:
     # Lookahead distance for Pure Pursuit (meters)
     # Larger values = smoother paths but less accurate tracking
-    lookahead_distance: 1.0
+    lookahead_distance: 2.0
     
     # Maximum velocities
     max_linear_velocity: 1.0   # m/s
@@ -35,4 +35,4 @@ path_following_controller:
     # - "pure_pursuit": original behavior (allows simultaneous turn + forward)
     # - "point_turn": only turn in place or drive straight
     # - "bezier": follow a Bezier-smoothed version of the path and publish it on /bezier_path
-    controller_type: "bezier"
+    controller_type: "pure_pursuit"
