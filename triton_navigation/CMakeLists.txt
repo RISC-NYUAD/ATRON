@@ -68,6 +68,7 @@ install(PROGRAMS
   scripts/orienteering.py
   scripts/op_solver_bridge.py
   scripts/pid.py
+  scripts/usv_pid_controller.py
   DESTINATION lib/${PROJECT_NAME}
 )
 ament_package()
