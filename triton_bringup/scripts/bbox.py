@@ -184,7 +184,7 @@ class BBoxVisualizer(Node):
         Colors match those used in orienteering.py for consistency"""
         if not self.color_code:
             # Use default colors when color coding is disabled
-            if class_name == 'buoy':
+            if class_name == 'obstacle':
                 return (0, 165, 255)  # Orange (BGR format for OpenCV)
             else:  # debris
                 return (0, 0, 255)    # Red (BGR format for OpenCV)
@@ -193,26 +193,26 @@ class BBoxVisualizer(Node):
         # Convert from RGB (orienteering.py) to BGR (OpenCV) format
         direction_colors = {
             'front': {
-                'buoy': (0, 204, 0),      # Green (0.0, 0.8, 0.0) -> (0, 204, 0)
+                'obstacle': (0, 204, 0),      # Green (0.0, 0.8, 0.0) -> (0, 204, 0)
                 'debris': (102, 255, 102) # Light green (0.4, 1.0, 0.4) -> (102, 255, 102)
             },
             'back': {
-                'buoy': (255, 102, 0),    # Blue (0.0, 0.4, 1.0) -> (255, 102, 0)
+                'obstacle': (255, 102, 0),    # Blue (0.0, 0.4, 1.0) -> (255, 102, 0)
                 'debris': (255, 178, 102) # Light blue (0.4, 0.7, 1.0) -> (255, 178, 102)
             },
             'left': {
-                'buoy': (0, 0, 255),      # Red (1.0, 0.0, 0.0) -> (0, 0, 255)
+                'obstacle': (0, 0, 255),      # Red (1.0, 0.0, 0.0) -> (0, 0, 255)
                 'debris': (153, 102, 255) # Light red/pink (1.0, 0.4, 0.6) -> (153, 102, 255)
             },
             'right': {
-                'buoy': (0, 204, 255),    # Yellow/orange (1.0, 0.8, 0.0) -> (0, 204, 255)
+                'obstacle': (0, 204, 255),    # Yellow/orange (1.0, 0.8, 0.0) -> (0, 204, 255)
                 'debris': (102, 255, 255) # Light yellow (1.0, 1.0, 0.4) -> (102, 255, 255)
             }
         }
         
         # Get colors for this camera direction
         colors = direction_colors.get(self.camera_direction, {
-            'buoy': (0, 165, 255),  # Orange fallback
+            'obstacle': (0, 165, 255),  # Orange fallback
             'debris': (0, 0, 255)   # Red fallback
         })
         
@@ -222,7 +222,7 @@ class BBoxVisualizer(Node):
         """Get a consistent color for each class"""
         if not self.color_code:
             # Use default colors when color coding is disabled
-            if class_name == 'buoy':
+            if class_name == 'obstacle':
                 return (0, 165, 255)  # Orange (BGR format for OpenCV)
             else:  # debris
                 return (0, 0, 255)    # Red (BGR format for OpenCV)
@@ -378,7 +378,7 @@ class BBoxVisualizer(Node):
                     marker.color.a = 1.0
                     
                     # Set marker type and scale based on class
-                    if class_name == 'buoy':  # Buoy
+                    if class_name == 'obstacle':  # obstacle
                         marker.type = Marker.CYLINDER
                         marker.scale.x = 1.0  # diameter = 2 * radius = 2 * 0.5 = 1.0
                         marker.scale.y = 1.0  # diameter
