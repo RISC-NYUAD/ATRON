@@ -5,15 +5,15 @@ path_following_controller:
     lookahead_distance: 0.5
     
     # Maximum velocities
-    max_linear_velocity: 1.0   # m/s
+    max_linear_velocity: 0.6   # m/s
     max_angular_velocity: 0.3  # rad/s
     min_linear_velocity: 0.01   # m/s - minimum speed to avoid getting stuck
     
     # Goal tolerance - stop when within this distance of goal (meters)
-    goal_tolerance: 1.0
+    goal_tolerance: 0.3
     
     # Control loop frequency (Hz)
-    control_frequency: 10.0
+    control_frequency: 50.0
     
     # Angular velocity gain - higher values = more aggressive turning
     # Reduce this if robot is spinning/oscillating
@@ -31,8 +31,14 @@ path_following_controller:
     # 0.8 = must complete at least 80% of path before goal check
     min_path_completion: 0.8
 
+    # Path smoothing:
+    # - false: follow the interpolated path (default behavior)
+    # - true: generate and follow a Bezier-smoothed version of the path,
+    #         also published on /bezier_path
+    smooth_path: true
+
     # Controller type:
-    # - "pure_pursuit": original behavior (allows simultaneous turn + forward)
+    # - "pure_pursuit": geometric pure pursuit (curvature from lookahead point)
     # - "point_turn": only turn in place or drive straight
-    # - "bezier": follow a Bezier-smoothed version of the path and publish it on /bezier_path
-    controller_type: "bezier"
+    # - "yaw_control": smooth yaw-correcting controller (no in-place turns)
+    controller_type: "pure_pursuit"

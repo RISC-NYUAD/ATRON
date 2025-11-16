@@ -27,6 +27,7 @@ public:
         this->declare_parameter("slowdown_radius", 0.5);
         this->declare_parameter("max_path_start_distance", 2.0);
         this->declare_parameter("min_path_completion", 0.8);
+        this->declare_parameter("smooth_path", false);
         this->declare_parameter("controller_type", std::string("pure_pursuit"));
 
         // Get parameters
@@ -40,10 +41,22 @@ public:
         slowdown_radius_ = this->get_parameter("slowdown_radius").as_double();
         max_path_start_distance_ = this->get_parameter("max_path_start_distance").as_double();
         min_path_completion_ = this->get_parameter("min_path_completion").as_double();
+        smooth_path_ = this->get_parameter("smooth_path").as_bool();
         controller_type_ = this->get_parameter("controller_type").as_string();
+
+        // Backward compatibility: treat legacy \"bezier\" controller_type as
+        // the new yaw_control controller with path smoothing enabled.
+        if (controller_type_ == "bezier") {
+            RCLCPP_WARN(this->get_logger(),
+                        "controller_type 'bezier' is deprecated. "
+                        "Using 'yaw_control' with smooth_path=true instead.");
+            controller_type_ = "yaw_control";
+            smooth_path_ = true;
+        }
+
         if (controller_type_ != "pure_pursuit" &&
             controller_type_ != "point_turn" &&
-            controller_type_ != "bezier") {
+            controller_type_ != "yaw_control") {
             RCLCPP_WARN(this->get_logger(),
                         "Unknown controller_type '%s', defaulting to 'pure_pursuit'",
                         controller_type_.c_str());
@@ -90,6 +103,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "Max linear velocity: %.2f m/s", max_linear_velocity_);
         RCLCPP_INFO(this->get_logger(), "Max angular velocity: %.2f rad/s", max_angular_velocity_);
         RCLCPP_INFO(this->get_logger(), "Min path completion: %.0f%% (for cyclic paths)", min_path_completion_ * 100.0);
+        RCLCPP_INFO(this->get_logger(), "Smooth path: %s", smooth_path_ ? "true" : "false");
         RCLCPP_INFO(this->get_logger(), "Controller type: %s", controller_type_.c_str());
         RCLCPP_INFO(this->get_logger(), "Navigation is initially DISABLED. Call /navigate service to start.");
     }
@@ -191,7 +205,7 @@ private:
 
         // Calculate path progress percentage
         size_t active_path_size = interpolated_path_.poses.size();
-        if (controller_type_ == "bezier" && !bezier_path_.poses.empty()) {
+        if (smooth_path_ && !bezier_path_.poses.empty()) {
             active_path_size = bezier_path_.poses.size();
         }
         if (active_path_size == 0) {
@@ -236,7 +250,7 @@ private:
                             geometry_msgs::msg::Point& lookahead_point)
     {
         const nav_msgs::msg::Path* path = &interpolated_path_;
-        if (controller_type_ == "bezier" && !bezier_path_.poses.empty()) {
+        if (smooth_path_ && !bezier_path_.poses.empty()) {
             path = &bezier_path_;
         }
 
@@ -335,9 +349,8 @@ private:
                 cmd_vel.linear.x = linear_velocity;
                 cmd_vel.angular.z = 0.0;
             }
-        } else if (controller_type_ == "bezier") {
-            // Use a smooth controller similar to pure pursuit,
-            // but without the large-angle turn-in-place threshold.
+        } else if (controller_type_ == "yaw_control") {
+            // Smooth yaw-correcting controller without large in-place turns.
             double angular_velocity = angular_velocity_gain_ * yaw_error;
             angular_velocity = std::clamp(angular_velocity,
                                           -max_angular_velocity_,
@@ -356,27 +369,51 @@ private:
             cmd_vel.linear.x = linear_velocity;
             cmd_vel.angular.z = angular_velocity;
         } else {
-            double angular_velocity = angular_velocity_gain_ * yaw_error;
-            
-            angular_velocity = std::clamp(angular_velocity, 
-                                         -max_angular_velocity_, 
-                                         max_angular_velocity_);
+            // Pure Pursuit controller (CMU-RI-TR-92-01):
+            // 1) Transform goal point into vehicle coordinates.
+            // 2) Compute curvature kappa = 2 * y / Ld^2.
+            // 3) Command angular velocity omega = kappa * v.
 
-            double linear_velocity;
-            
-            if (std::abs(yaw_error) > M_PI / 2.0) {
-                linear_velocity = 0.0;
-                RCLCPP_DEBUG(this->get_logger(), "Large yaw error %.2f rad, turning in place", yaw_error);
-            } else {
-                double angular_factor = 1.0 - std::min(std::abs(angular_velocity) / max_angular_velocity_, 1.0);
-                linear_velocity = min_linear_velocity_ + 
-                                (max_linear_velocity_ - min_linear_velocity_) * angular_factor;
+            // Transform lookahead point into vehicle frame (x forward, y left)
+            double cos_yaw = std::cos(robot_yaw);
+            double sin_yaw = std::sin(robot_yaw);
+            double x_v =  cos_yaw * dx + sin_yaw * dy;
+            double y_v = -sin_yaw * dx + cos_yaw * dy;
+
+            double Ld = std::hypot(x_v, y_v);
+            if (Ld < 1e-6) {
+                cmd_vel.linear.x = 0.0;
+                cmd_vel.angular.z = 0.0;
+                return;
             }
 
+            // Curvature that drives an arc from rear axle to goal point
+            double curvature = 2.0 * y_v / (Ld * Ld);
+
+            // Start from maximum linear speed, then adjust
+            double linear_velocity = max_linear_velocity_;
+
+            // Slow down near the goal
             if (goal_distance < slowdown_radius_) {
                 double slowdown_factor = goal_distance / slowdown_radius_;
                 linear_velocity *= slowdown_factor;
                 linear_velocity = std::max(linear_velocity, min_linear_velocity_);
+            }
+
+            double angular_velocity = curvature * linear_velocity;
+
+            // Enforce angular velocity limits by scaling linear velocity if needed
+            double abs_angular = std::abs(angular_velocity);
+            if (abs_angular > max_angular_velocity_) {
+                if (std::abs(curvature) > 1e-6) {
+                    linear_velocity = std::max(min_linear_velocity_,
+                                               max_angular_velocity_ / std::abs(curvature));
+                    angular_velocity = std::copysign(max_angular_velocity_,
+                                                     curvature * linear_velocity);
+                } else {
+                    angular_velocity = std::copysign(max_angular_velocity_, angular_velocity);
+                    linear_velocity = min_linear_velocity_;
+                }
             }
 
             cmd_vel.linear.x = linear_velocity;
@@ -412,7 +449,7 @@ private:
         
         navigation_enabled_ = true;
         path_index_ = 0;  // Reset to start of path
-        if (controller_type_ == "bezier") {
+        if (smooth_path_) {
             generateBezierPath();
             if (!bezier_path_.poses.empty()) {
                 bezier_path_pub_->publish(bezier_path_);
@@ -630,6 +667,7 @@ private:
     double slowdown_radius_;
     double max_path_start_distance_;
     double min_path_completion_;
+    bool smooth_path_;
     std::string controller_type_;
 };
 
