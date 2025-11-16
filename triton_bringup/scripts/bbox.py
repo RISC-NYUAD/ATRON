@@ -12,6 +12,11 @@ import json
 from message_filters import Subscriber, TimeSynchronizer, ApproximateTimeSynchronizer
 from rcl_interfaces.msg import ParameterDescriptor
 import numpy as np
+import math
+import tf2_ros
+from tf2_ros import TransformException
+from tf2_ros.buffer import Buffer
+from tf2_ros.transform_listener import TransformListener
 
 
 class BBoxVisualizer(Node):
@@ -106,6 +111,21 @@ class BBoxVisualizer(Node):
             'front',
             ParameterDescriptor(description='Camera direction (front, back, left, right) for color coding')
         )
+        self.declare_parameter(
+            'use_tf_projection',
+            True,
+            ParameterDescriptor(description='Use odom->camera TF for ground-plane projection')
+        )
+        self.declare_parameter(
+            'odom_frame',
+            'odom',
+            ParameterDescriptor(description='World/odom frame whose Z-axis is normal to the water surface')
+        )
+        self.declare_parameter(
+            'transform_timeout',
+            0.1,
+            ParameterDescriptor(description='TF lookup timeout in seconds when querying odom->camera transforms')
+        )
         
         # Get parameter values
         image_topic = self.get_parameter('image_topic').get_parameter_value().string_value
@@ -127,6 +147,9 @@ class BBoxVisualizer(Node):
         self.camera_direction = self.get_parameter('camera_direction').get_parameter_value().string_value
         self.horizon_margin = self.get_parameter('horizon_margin').get_parameter_value().double_value
         self.max_range = self.get_parameter('max_range').get_parameter_value().double_value
+        self.use_tf_projection = self.get_parameter('use_tf_projection').get_parameter_value().bool_value
+        self.odom_frame = self.get_parameter('odom_frame').get_parameter_value().string_value
+        self.transform_timeout = self.get_parameter('transform_timeout').get_parameter_value().double_value
         
         # Initialize CV bridge
         self.bridge = CvBridge()
@@ -162,6 +185,12 @@ class BBoxVisualizer(Node):
         self.get_logger().info(f'Publishing 3D markers to: {marker_topic}')
         self.get_logger().info(f'Camera parameters: cx={self.cx}, cy={self.cy}, fx={self.fx}, fy={self.fy}')
         self.get_logger().info(f'Projection parameters: fov={self.fov:.3f} rad, height={self.height}m, offset={self.offset}m')
+        self.get_logger().info(f'Using odom frame "{self.odom_frame}" for ground-plane projection via TF')
+        self.get_logger().info(f'TF-based projection: {"ENABLED" if self.use_tf_projection else "DISABLED"}')
+
+        # Initialize TF2 for odom -> camera transforms
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
         
         # Color map for different classes
         self.colors = {}
@@ -178,6 +207,32 @@ class BBoxVisualizer(Node):
             (0, 0, 128),     # Dark Blue
             (255, 128, 0),   # Orange
         ]
+
+    def quaternion_to_rotation_matrix(self, x, y, z, w):
+        """Convert quaternion to 3x3 rotation matrix (camera -> odom)."""
+        norm = math.sqrt(x * x + y * y + z * z + w * w)
+        if norm == 0.0:
+            return np.eye(3)
+        x /= norm
+        y /= norm
+        z /= norm
+        w /= norm
+
+        xx = x * x
+        yy = y * y
+        zz = z * z
+        xy = x * y
+        xz = x * z
+        yz = y * z
+        wx = w * x
+        wy = w * y
+        wz = w * z
+
+        return np.array([
+            [1.0 - 2.0 * (yy + zz), 2.0 * (xy - wz),       2.0 * (xz + wy)],
+            [2.0 * (xy + wz),       1.0 - 2.0 * (xx + zz), 2.0 * (yz - wx)],
+            [2.0 * (xz - wy),       2.0 * (yz + wx),       1.0 - 2.0 * (xx + yy)],
+        ], dtype=float)
     
     def get_direction_colors(self, class_name):
         """Get direction-specific colors for bounding boxes when color_code is enabled
@@ -261,7 +316,7 @@ class BBoxVisualizer(Node):
                 self.marker_pub.publish(empty_marker_array)
                 self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
                 return
-            
+
             # Vectorized 3D projection - collect all bbox data into arrays
             n_detections = len(bbox_array_msg.detections)
             center_x = np.zeros(n_detections)
@@ -275,28 +330,97 @@ class BBoxVisualizer(Node):
             
             # Compute bottom_y for all detections
             bottom_y = center_y + size_y / 2
-            
-            # Proper pinhole projection (no linear FOV scaling):
-            # tan(theta_y) = (v - cy) / fy ; z = height / tan(theta_y) = height * fy / (v - cy)
-            # x = z * (u - cx) / fx
-            dy = bottom_y - self.cy
-            valid = dy > self.horizon_margin
 
-            z_values = np.full(n_detections, np.nan, dtype=float)
+            # Prepare arrays for 3D positions in the camera frame
             x_values = np.full(n_detections, np.nan, dtype=float)
+            y_values = np.full(n_detections, np.nan, dtype=float)
+            z_values = np.full(n_detections, np.nan, dtype=float)
 
-            if np.any(valid):
-                z_values[valid] = (self.height * self.fy) / dy[valid] + self.offset
-                x_values[valid] = ((center_x[valid] - self.cx) / self.fx) * z_values[valid]
+            # Basic pixel-based validity (avoid obvious near-horizon blowup)
+            dy = bottom_y - self.cy
+            pixel_valid = dy > self.horizon_margin
 
-                # Optional max range clamp
-                if self.max_range > 0.0:
-                    z_values[valid] = np.minimum(z_values[valid], self.max_range)
+            # Default to no TF-based projection
+            tf_projection_successful = False
+            dir_cam_x = None
+            dir_cam_y = None
+
+            # Try to get odom -> camera transform for this image
+            camera_frame = image_msg.header.frame_id
+            if self.use_tf_projection and camera_frame:
+                try:
+                    transform = self.tf_buffer.lookup_transform(
+                        self.odom_frame,
+                        camera_frame,
+                        rclpy.time.Time(),  # Latest available transform
+                        timeout=rclpy.duration.Duration(seconds=self.transform_timeout)
+                    )
+
+                    q = transform.transform.rotation
+                    R_oc = self.quaternion_to_rotation_matrix(q.x, q.y, q.z, q.w)
+                    # Third row of rotation matrix gives world Z component of camera-frame directions
+                    r20, r21, r22 = R_oc[2, 0], R_oc[2, 1], R_oc[2, 2]
+
+                    # Direction vectors in camera frame for each detection
+                    dir_cam_x = (center_x - self.cx) / self.fx
+                    dir_cam_y = (bottom_y - self.cy) / self.fy
+
+                    # z-component of each ray in odom frame
+                    dir_odom_z = r20 * dir_cam_x + r21 * dir_cam_y + r22
+
+                    # Require the ray to point downward toward the water surface
+                    direction_valid = dir_odom_z < -1e-3
+
+                    valid = pixel_valid & direction_valid
+
+                    if np.any(valid):
+                        # Distance along the ray from camera to water plane (in camera frame units)
+                        # Derived from world Z: lambda * dir_odom_z = -height  => lambda = -height / dir_odom_z
+                        lambda_values = np.full(n_detections, np.nan, dtype=float)
+                        lambda_values[valid] = -self.height / dir_odom_z[valid]
+
+                        # 3D points in the camera frame
+                        x_values[valid] = dir_cam_x[valid] * lambda_values[valid]
+                        y_values[valid] = dir_cam_y[valid] * lambda_values[valid]
+                        z_values[valid] = lambda_values[valid]
+
+                        # Optional forward offset along camera Z axis
+                        if self.offset != 0.0:
+                            z_values[valid] += self.offset
+
+                        # Optional max range clamp (on forward distance); keep consistent with previous behavior
+                        if self.max_range > 0.0:
+                            z_values[valid] = np.minimum(z_values[valid], self.max_range)
+
+                        tf_projection_successful = True
+                    else:
+                        self.get_logger().debug('No valid rays for TF-based ground-plane projection (all near horizon or pointing upward)')
+
+                except TransformException as ex:
+                    self.get_logger().debug(
+                        f'Could not transform from {self.odom_frame} to {camera_frame} for ground-plane projection: {ex}'
+                    )
+
+            # Fallback: if TF lookup failed, revert to the original pinhole projection that assumes level camera
+            if not tf_projection_successful:
+                valid = pixel_valid
+
+                if np.any(valid):
+                    # Original projection assuming camera optical axis is parallel to water surface
+                    # tan(theta_y) = (v - cy) / fy ; z = height / tan(theta_y) = height * fy / (v - cy)
+                    # x = z * (u - cx) / fx
+                    z_values[valid] = (self.height * self.fy) / dy[valid] + self.offset
+                    x_values[valid] = ((center_x[valid] - self.cx) / self.fx) * z_values[valid]
+                    y_values[valid] = self.height  # Approximate vertical position as camera height
+
+                    # Optional max range clamp
+                    if self.max_range > 0.0:
+                        z_values[valid] = np.minimum(z_values[valid], self.max_range)
             
             # Process each detection in the array
             for i, detection in enumerate(bbox_array_msg.detections):
                 # Skip invalid projections (near or above horizon)
-                if not np.isfinite(x_values[i]) or not np.isfinite(z_values[i]):
+                if not np.isfinite(x_values[i]) or not np.isfinite(z_values[i]) or not np.isfinite(y_values[i]):
                     # Optionally, draw bbox only without placing a 3D marker
                     continue
 
@@ -362,9 +486,9 @@ class BBoxVisualizer(Node):
                     marker.id = i
                     marker.ns = "detections"
                     
-                    # Use pre-computed 3D positions
+                    # Use pre-computed 3D positions in the camera frame
                     marker.pose.position.x = x_values[i]
-                    marker.pose.position.y = self.height
+                    marker.pose.position.y = y_values[i]
                     marker.pose.position.z = z_values[i]
                     
                     # Get color from bounding box (BGR) and convert to RGB
@@ -382,12 +506,9 @@ class BBoxVisualizer(Node):
                         marker.type = Marker.CYLINDER
                         marker.scale.x = 1.0  # diameter = 2 * radius = 2 * 0.5 = 1.0
                         marker.scale.y = 1.0  # diameter
-                        marker.scale.z = self.height  # height
+                        marker.scale.z = self.height  # height (used mainly for visualization)
                         
-                        # Adjust position so cylinder extends upward from water surface
-                        marker.pose.position.y = self.height / 2.0  # Center of cylinder at half height
-                        
-                        # Rotate cylinder to align with y-axis pointing up (-90 degrees around x-axis)
+                        # Keep the existing orientation convention for visualization
                         marker.pose.orientation.x = -0.707
                         marker.pose.orientation.y = 0.0
                         marker.pose.orientation.z = 0.0

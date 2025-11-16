@@ -65,7 +65,7 @@
         <param name="fy" value="240.0"/>
         <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
-        <param name="color_code" value="false"/>
+        <param name="color_code" value="true"/>
         <param name="camera_direction" value="front"/>
     </node>
     <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_back">
@@ -81,7 +81,7 @@
         <param name="fy" value="240.0"/>
         <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
-        <param name="color_code" value="false"/>
+        <param name="color_code" value="true"/>
         <param name="camera_direction" value="back"/>
     </node>
     <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_left">
@@ -97,7 +97,7 @@
         <param name="fy" value="240.0"/>
         <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
-        <param name="color_code" value="false"/>
+        <param name="color_code" value="true"/>
         <param name="camera_direction" value="left"/>
     </node>
     <node pkg="triton_bringup" exec="bbox.py" name="bounding_box_right">
@@ -113,7 +113,7 @@
         <param name="fy" value="240.0"/>
         <param name="height" value="1.70"/>
         <param name="offset" value="0.5"/>
-        <param name="color_code" value="false"/>
+        <param name="color_code" value="true"/>
         <param name="camera_direction" value="right"/>
     </node>
 
@@ -124,7 +124,7 @@
         <param name="output_frame" value="map"/>
         <param name="sync_tolerance" value="0.1"/>
         <param name="transform_timeout" value="0.1"/>
-        <param name="tracking_enabled" value="false"/>
+        <param name="tracking_enabled" value="true"/>
         <param name="color_code" value="true"/>
         <param name="max_tracking_age" value="10"/>
         <param name="min_tracking_hits" value="2"/>
