@@ -7,7 +7,7 @@ path_following_controller:
     # Maximum velocities
     max_linear_velocity: 0.6   # m/s
     max_angular_velocity: 0.3  # rad/s
-    min_linear_velocity: 0.01   # m/s - minimum speed to avoid getting stuck
+    min_linear_velocity: 0.0   # m/s - minimum speed to avoid getting stuck
     
     # Goal tolerance - stop when within this distance of goal (meters)
     goal_tolerance: 0.3
@@ -42,4 +42,4 @@ path_following_controller:
     # - "regulated_pure_pursuit": pure pursuit with curvature-based velocity regulation
     # - "point_turn": only turn in place or drive straight
     # - "yaw_control": smooth yaw-correcting controller (no in-place turns)
-    controller_type: "pure_pursuit"
+    controller_type: "yaw_control"
