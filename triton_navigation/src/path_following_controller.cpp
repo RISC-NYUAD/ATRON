@@ -390,10 +390,11 @@ private:
             // Curvature that drives an arc from rear axle to goal point
             double curvature = 2.0 * y_v / (Ld * Ld);
 
-            // Start from maximum linear speed, then adjust
+            // Linear speed is chosen independently of curvature (pure pursuit
+            // only defines the steering geometry).
             double linear_velocity = max_linear_velocity_;
 
-            // Slow down near the goal
+            // Optional slowdown near the goal
             if (goal_distance < slowdown_radius_) {
                 double slowdown_factor = goal_distance / slowdown_radius_;
                 linear_velocity *= slowdown_factor;
@@ -402,19 +403,10 @@ private:
 
             double angular_velocity = curvature * linear_velocity;
 
-            // Enforce angular velocity limits by scaling linear velocity if needed
-            double abs_angular = std::abs(angular_velocity);
-            if (abs_angular > max_angular_velocity_) {
-                if (std::abs(curvature) > 1e-6) {
-                    linear_velocity = std::max(min_linear_velocity_,
-                                               max_angular_velocity_ / std::abs(curvature));
-                    angular_velocity = std::copysign(max_angular_velocity_,
-                                                     curvature * linear_velocity);
-                } else {
-                    angular_velocity = std::copysign(max_angular_velocity_, angular_velocity);
-                    linear_velocity = min_linear_velocity_;
-                }
-            }
+            // Enforce angular velocity limits by saturating omega only.
+            angular_velocity = std::clamp(angular_velocity,
+                                          -max_angular_velocity_,
+                                          max_angular_velocity_);
 
             cmd_vel.linear.x = linear_velocity;
             cmd_vel.angular.z = angular_velocity;
