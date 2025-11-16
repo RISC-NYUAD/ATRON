@@ -44,16 +44,6 @@ public:
         smooth_path_ = this->get_parameter("smooth_path").as_bool();
         controller_type_ = this->get_parameter("controller_type").as_string();
 
-        // Backward compatibility: treat legacy \"bezier\" controller_type as
-        // the new yaw_control controller with path smoothing enabled.
-        if (controller_type_ == "bezier") {
-            RCLCPP_WARN(this->get_logger(),
-                        "controller_type 'bezier' is deprecated. "
-                        "Using 'yaw_control' with smooth_path=true instead.");
-            controller_type_ = "yaw_control";
-            smooth_path_ = true;
-        }
-
         if (controller_type_ != "pure_pursuit" &&
             controller_type_ != "regulated_pure_pursuit" &&
             controller_type_ != "point_turn" &&
