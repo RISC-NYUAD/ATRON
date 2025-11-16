@@ -19,7 +19,7 @@ path_following_controller:
     # Reduce this if robot is spinning/oscillating
     angular_velocity_gain: 2.0
     
-    # Slowdown radius - start slowing down when this close to goal (meters)
+    # Slowdown radius (currently unused)
     slowdown_radius: 0.5
     
     # Maximum distance to accept a new path (meters)
@@ -38,7 +38,8 @@ path_following_controller:
     smooth_path: true
 
     # Controller type:
-    # - "pure_pursuit": geometric pure pursuit (curvature from lookahead point)
+    # - "pure_pursuit": geometric pure pursuit (constant linear velocity)
+    # - "regulated_pure_pursuit": pure pursuit with curvature-based velocity regulation
     # - "point_turn": only turn in place or drive straight
     # - "yaw_control": smooth yaw-correcting controller (no in-place turns)
     controller_type: "pure_pursuit"

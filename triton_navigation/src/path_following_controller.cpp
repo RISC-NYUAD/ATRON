@@ -55,6 +55,7 @@ public:
         }
 
         if (controller_type_ != "pure_pursuit" &&
+            controller_type_ != "regulated_pure_pursuit" &&
             controller_type_ != "point_turn" &&
             controller_type_ != "yaw_control") {
             RCLCPP_WARN(this->get_logger(),
@@ -338,12 +339,6 @@ private:
                 cmd_vel.angular.z = angular_velocity;
             } else {
                 double linear_velocity = max_linear_velocity_;
-
-                if (goal_distance < slowdown_radius_) {
-                    double slowdown_factor = goal_distance / slowdown_radius_;
-                    linear_velocity *= slowdown_factor;
-                }
-
                 linear_velocity = std::max(linear_velocity, min_linear_velocity_);
 
                 cmd_vel.linear.x = linear_velocity;
@@ -360,11 +355,49 @@ private:
             double linear_velocity = min_linear_velocity_ +
                                      (max_linear_velocity_ - min_linear_velocity_) * angular_factor;
 
-            if (goal_distance < slowdown_radius_) {
-                double slowdown_factor = goal_distance / slowdown_radius_;
-                linear_velocity *= slowdown_factor;
-                linear_velocity = std::max(linear_velocity, min_linear_velocity_);
+            cmd_vel.linear.x = linear_velocity;
+            cmd_vel.angular.z = angular_velocity;
+        } else if (controller_type_ == "regulated_pure_pursuit") {
+            // Regulated pure pursuit: geometric pure pursuit steering
+            // with curvature-based linear velocity regulation.
+
+            // Transform lookahead point into vehicle frame (x forward, y left)
+            double cos_yaw = std::cos(robot_yaw);
+            double sin_yaw = std::sin(robot_yaw);
+            double x_v =  cos_yaw * dx + sin_yaw * dy;
+            double y_v = -sin_yaw * dx + cos_yaw * dy;
+
+            double Ld = std::hypot(x_v, y_v);
+            if (Ld < 1e-6) {
+                cmd_vel.linear.x = 0.0;
+                cmd_vel.angular.z = 0.0;
+                return;
             }
+
+            double curvature = 2.0 * y_v / (Ld * Ld);
+
+            double linear_velocity = max_linear_velocity_;
+
+            // Reduce linear speed for tight turns (small turning radius).
+            double abs_curvature = std::abs(curvature);
+            if (abs_curvature > 1e-6) {
+                const double min_turning_radius = 1.0;  // meters
+                double radius = 1.0 / abs_curvature;
+                if (radius < min_turning_radius) {
+                    double scale = radius / min_turning_radius;
+                    scale = std::clamp(scale, 0.0, 1.0);
+                    linear_velocity *= scale;
+                }
+            }
+
+            linear_velocity = std::clamp(linear_velocity,
+                                         min_linear_velocity_,
+                                         max_linear_velocity_);
+
+            double angular_velocity = curvature * linear_velocity;
+            angular_velocity = std::clamp(angular_velocity,
+                                          -max_angular_velocity_,
+                                          max_angular_velocity_);
 
             cmd_vel.linear.x = linear_velocity;
             cmd_vel.angular.z = angular_velocity;
@@ -393,13 +426,6 @@ private:
             // Linear speed is chosen independently of curvature (pure pursuit
             // only defines the steering geometry).
             double linear_velocity = max_linear_velocity_;
-
-            // Optional slowdown near the goal
-            if (goal_distance < slowdown_radius_) {
-                double slowdown_factor = goal_distance / slowdown_radius_;
-                linear_velocity *= slowdown_factor;
-                linear_velocity = std::max(linear_velocity, min_linear_velocity_);
-            }
 
             double angular_velocity = curvature * linear_velocity;
 
