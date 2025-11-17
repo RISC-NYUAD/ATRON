@@ -2,7 +2,7 @@ path_following_controller:
   ros__parameters:
     # Lookahead distance for Pure Pursuit (meters)
     # Larger values = smoother paths but less accurate tracking
-    lookahead_distance: 0.5
+    lookahead_distance: 0.4 
     
     # Maximum velocities
     max_linear_velocity: 0.6   # m/s
@@ -15,12 +15,9 @@ path_following_controller:
     # Control loop frequency (Hz)
     control_frequency: 50.0
     
-    # Angular velocity gain - higher values = more aggressive turning
-    # Reduce this if robot is spinning/oscillating
     angular_velocity_gain: 2.0
     
-    # Slowdown radius (currently unused)
-    slowdown_radius: 0.5
+    ?slowdown_radius: 0.5
     
     # Maximum distance to accept a new path (meters)
     # Paths starting farther than this from robot are rejected
@@ -33,8 +30,7 @@ path_following_controller:
 
     # Path smoothing:
     # - false: follow the interpolated path (default behavior)
-    # - true: generate and follow a Bezier-smoothed version of the path,
-    #         also published on /bezier_path
+    # - true: generate and follow bezier interpolation
     smooth_path: true
 
     # Controller type:
@@ -42,4 +38,4 @@ path_following_controller:
     # - "regulated_pure_pursuit": pure pursuit with curvature-based velocity regulation
     # - "point_turn": only turn in place or drive straight
     # - "yaw_control": smooth yaw-correcting controller (no in-place turns)
-    controller_type: "yaw_control"
+    controller_type: "regulated_pure_pursuit"

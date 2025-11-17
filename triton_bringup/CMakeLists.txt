@@ -23,6 +23,9 @@ install(
 
 ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
+  scripts/diagonal_path.py
+  scripts/square_path.py
+  scripts/step_cmd_vel.py
   scripts/usb_cam.py
   scripts/arduino.py
   scripts/yolo.py
@@ -34,6 +37,8 @@ install(PROGRAMS
   scripts/bag_to_cubemap.py
   scripts/bag_to_cubemap_gpu.py
   scripts/undistort.py
+  scripts/custom_path.py
+  scripts/odometry.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

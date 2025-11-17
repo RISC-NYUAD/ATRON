@@ -316,7 +316,7 @@ private:
         while (yaw_error < -M_PI) yaw_error += 2.0 * M_PI;
 
         if (controller_type_ == "point_turn") {
-            const double yaw_threshold = 0.1;
+            const double yaw_threshold = 0.2;
 
             cmd_vel.linear.x = 0.0;
             cmd_vel.angular.z = 0.0;
