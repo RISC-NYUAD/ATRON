@@ -24,11 +24,13 @@ public:
         this->declare_parameter("goal_tolerance", 0.1);
         this->declare_parameter("control_frequency", 10.0);
         this->declare_parameter("angular_velocity_gain", 2.0);
-        this->declare_parameter("slowdown_radius", 0.5);
         this->declare_parameter("max_path_start_distance", 2.0);
         this->declare_parameter("min_path_completion", 0.8);
         this->declare_parameter("smooth_path", false);
         this->declare_parameter("controller_type", std::string("pure_pursuit"));
+        this->declare_parameter("kappa_threshold", 1.0);
+        this->declare_parameter("kappa_max", 2.0);
+        this->declare_parameter("turning_radius", 1.0);
 
         // Get parameters
         lookahead_distance_ = this->get_parameter("lookahead_distance").as_double();
@@ -38,11 +40,13 @@ public:
         goal_tolerance_ = this->get_parameter("goal_tolerance").as_double();
         double control_frequency = this->get_parameter("control_frequency").as_double();
         angular_velocity_gain_ = this->get_parameter("angular_velocity_gain").as_double();
-        slowdown_radius_ = this->get_parameter("slowdown_radius").as_double();
         max_path_start_distance_ = this->get_parameter("max_path_start_distance").as_double();
         min_path_completion_ = this->get_parameter("min_path_completion").as_double();
         smooth_path_ = this->get_parameter("smooth_path").as_bool();
         controller_type_ = this->get_parameter("controller_type").as_string();
+        kappa_threshold_ = this->get_parameter("kappa_threshold").as_double();
+        kappa_max_ = this->get_parameter("kappa_max").as_double();
+        turning_radius_ = this->get_parameter("turning_radius").as_double();
 
         if (controller_type_ != "pure_pursuit" &&
             controller_type_ != "regulated_pure_pursuit" &&
@@ -366,23 +370,32 @@ private:
 
             double curvature = 2.0 * y_v / (Ld * Ld);
 
-            double linear_velocity = max_linear_velocity_;
-
-            // Reduce linear speed for tight turns (small turning radius).
+            // Curvature-based linear velocity regulation:
+            // v_kappa =
+            //   v,                        if |kappa| < kappa_threshold_
+            //   v * r_min / |kappa|,      if kappa_threshold_ <= |kappa| < kappa_max_
+            //   0,                        if |kappa| >= kappa_max_
+            //
+            // where r_min = turning_radius_ (desired minimum turning radius at max speed).
+            double linear_velocity = 0.0;
             double abs_curvature = std::abs(curvature);
-            if (abs_curvature > 1e-6) {
-                const double min_turning_radius = 1.0;  // meters
-                double radius = 1.0 / abs_curvature;
-                if (radius < min_turning_radius) {
-                    double scale = radius / min_turning_radius;
-                    scale = std::clamp(scale, 0.0, 1.0);
-                    linear_velocity *= scale;
-                }
+
+            if (abs_curvature < kappa_threshold_) {
+                linear_velocity = max_linear_velocity_;
+            } else if (abs_curvature < kappa_max_) {
+                // Scale down speed inversely with curvature magnitude.
+                // For |kappa| >= 1 / r_min, this yields v_kappa <= v.
+                linear_velocity = max_linear_velocity_ * (turning_radius_ / abs_curvature);
+            } else {
+                // Extremely tight curvature: come to a stop and rotate in place.
+                linear_velocity = 0.0;
             }
 
-            linear_velocity = std::clamp(linear_velocity,
-                                         min_linear_velocity_,
-                                         max_linear_velocity_);
+            if (linear_velocity > 0.0) {
+                linear_velocity = std::clamp(linear_velocity,
+                                             min_linear_velocity_,
+                                             max_linear_velocity_);
+            }
 
             double angular_velocity = curvature * linear_velocity;
             angular_velocity = std::clamp(angular_velocity,
@@ -672,11 +685,13 @@ private:
     double min_linear_velocity_;
     double goal_tolerance_;
     double angular_velocity_gain_;
-    double slowdown_radius_;
     double max_path_start_distance_;
     double min_path_completion_;
     bool smooth_path_;
     std::string controller_type_;
+    double kappa_threshold_;
+    double kappa_max_;
+    double turning_radius_;
 };
 
 int main(int argc, char** argv)

@@ -141,7 +141,7 @@
     <node pkg="triton_bringup" exec="odometry.py" name="odometry"/>
     
     <!-- Scan Matcher -->
-    <node pkg="ros2_laser_scan_matcher" exec="laser_scan_matcher" name="scan_matcher" output="screen">
+    <node pkg="ros2_laser_scan_matcher" exec="laser_scan_matcher" name="scan_matcher" output="log">
         <param name="use_sim_time" value="$(var use_sim_time)"/>
         <param name="base_frame" value="base_link"/>
         <param name="odom_frame" value="odom"/>

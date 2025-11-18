@@ -2,7 +2,7 @@ path_following_controller:
   ros__parameters:
     # Lookahead distance for Pure Pursuit (meters)
     # Larger values = smoother paths but less accurate tracking
-    lookahead_distance: 0.4 
+    lookahead_distance: 1.5
     
     # Maximum velocities
     max_linear_velocity: 0.6   # m/s
@@ -16,12 +16,19 @@ path_following_controller:
     control_frequency: 50.0
     
     angular_velocity_gain: 2.0
-    
-    ?slowdown_radius: 0.5
+
+    # Curvature regulation parameters for regulated pure pursuit
+    # turning_radius: r_min in the controller equations (meters)
+    # kappa_threshold: below this |kappa|, drive at full linear speed
+    # kappa_max: above this |kappa|, command zero linear speed
+    # Units: 1/m (kappa = 1 / turning_radius)
+    turning_radius: 1.5  # desired minimum turning radius at max speed
+    kappa_threshold: 1.0   # start scaling at radius <= 1 m
+    kappa_max: 2.0         # stop translation at radius < 0.5 m
     
     # Maximum distance to accept a new path (meters)
     # Paths starting farther than this from robot are rejected
-    max_path_start_distance: 0.5
+    max_path_start_distance: 10.0
     
     # Minimum path completion before checking goal (0.0 to 1.0)
     # Prevents premature goal detection in cyclic paths
