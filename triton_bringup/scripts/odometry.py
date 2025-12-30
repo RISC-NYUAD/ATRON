@@ -38,13 +38,18 @@ class OdomThrottle(Node):
             50,
         )
 
-        self.timer = self.create_timer(0.25, self.on_timer)   # 10 Hz
+        self.timer = self.create_timer(0.01, self.on_timer)
 
         # std devs matching the covariances below
-        self.sigma_pos = 0.8      # [m]     x,y
-        self.sigma_yaw = 0.02       # [rad]
-        self.sigma_v = 0.05         # [m/s]   vx,vy
-        self.sigma_yaw_rate = 0.02  # [rad/s]
+        # self.sigma_pos = 0.8      # [m]     x,y
+        # self.sigma_yaw = 0.02       # [rad]
+        # self.sigma_v = 0.05         # [m/s]   vx,vy
+        # self.sigma_yaw_rate = 0.02  # [rad/s]
+
+        self.sigma_pos = 0.0      # [m]     x,y
+        self.sigma_yaw = 0.0       # [rad]
+        self.sigma_v = 0.0         # [m/s]   vx,vy
+        self.sigma_yaw_rate = 0.0 
 
     def cb(self, msg: Odometry):
         self.last_msg = msg

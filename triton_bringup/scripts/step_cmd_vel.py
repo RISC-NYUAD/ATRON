@@ -13,7 +13,8 @@ class StepCmdVel(Node):
 
         self.step_period = 4.0
         self.publish_rate = 30.0  # Hz
-        self.step_values = [0.0, 0.3, 0.0, -0.3]
+        # self.step_values = [0.0, 0.3, 0.0, -0.3]
+        self.step_values = [0.0, 0.6, 0.0, -0.6]
         self.current_index = 0
         self.last_toggle_time = self.get_clock().now()
 
@@ -28,8 +29,8 @@ class StepCmdVel(Node):
             self.last_toggle_time = now
 
         msg = Twist()
-        msg.angular.z = self.step_values[self.current_index]
-        # msg.linear.x = self.step_values[self.current_index]
+        # msg.angular.z = self.step_values[self.current_index]
+        msg.linear.x = self.step_values[self.current_index]
 
         self.publisher_.publish(msg)
         # self.get_logger().info(f'Publishing cmd_vel linear.x = {msg.linear.x}')

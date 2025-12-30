@@ -116,7 +116,7 @@ class USVPIDController(Node):
         
         self.odom_sub = self.create_subscription(
             Odometry,
-            '/odometry/filtered',
+            '/odom_true',
             self.odom_callback,
             10
         )
