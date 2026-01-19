@@ -1,4 +1,4 @@
-# Atron
+# ATRON
 
 This repo contains instructions for how to use the Isaac SIM simulation for the Atron USV autonomous debris collection vehicle.
 
