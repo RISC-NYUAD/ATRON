@@ -1,10 +1,12 @@
 # ATRON: Autonomous Trash Retrieval for Oceanic Neatness
 
 Please visit our website and paper for more information about this project. 
-
+<div align="center">
+  
 [[Website]](https://risc-nyuad.github.io/atron_website/)
 [[Paper]](https://www.frontiersin.org/journals/robotics-and-ai/articles/10.3389/frobt.2025.1718177)
 
+</div>
 This repo contains instructions for how to use the Isaac SIM simulation for the Atron USV autonomous debris collection vehicle.
 
 <div align="center">
